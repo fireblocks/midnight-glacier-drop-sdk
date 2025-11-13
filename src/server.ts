@@ -11,6 +11,13 @@ import { ApiServiceConfig } from "./types.js";
 import { BasePath } from "@fireblocks/ts-sdk";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import { Logger, LogLevel } from "./utils/logger.js";
+
+const logLevel = "INFO";
+Logger.setLogLevel(
+  LogLevel[logLevel as keyof typeof LogLevel] || LogLevel.INFO
+);
+const logger = new Logger("app:server-setup");
 
 const fbNightApiServiceConfigs: ApiServiceConfig = {
   apiKey: config.FIREBLOCKS.apiKey || "",
@@ -35,7 +42,7 @@ const startServer = () => {
   app.use("/api", router);
 
   app.get("/health", (_req: Request, res: Response) => {
-    console.log("alive");
+    logger.info("alive");
     res.status(200).send("Alive");
   });
 
@@ -50,7 +57,7 @@ const startServer = () => {
   app.use("/docs", express.static(path.join(__dirname, "../docs")));
 
   app.listen(config.PORT, () => {
-    console.log(`Example app listening on port ${config.PORT}`);
+    logger.info(`Example app listening on port ${config.PORT}`);
   });
 };
 

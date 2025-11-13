@@ -2,6 +2,13 @@ import { BlockFrostAPI } from "@blockfrost/blockfrost-js";
 import * as lucid from "lucid-cardano";
 import { nightTokenName } from "../constants.js";
 import { Utxo } from "../types.js";
+import { Logger, LogLevel } from "./logger.js";
+
+const logLevel = "INFO";
+Logger.setLogLevel(
+  LogLevel[logLevel as keyof typeof LogLevel] || LogLevel.INFO
+);
+const logger = new Logger("utils:cardano");
 
 /**
  * Fetches UTXOs for a given Cardano address using Blockfrost, and selects enough UTXOs to satisfy
@@ -363,11 +370,11 @@ export const calculateTtl = async (
     // Convert slot to unix timestamp (in ms)
     const ttlUnixMs = lucid.utils.slotToUnixTime(ttlSlot);
 
-    console.log(`Calculated TTL (ms): ${ttlUnixMs} (slot: ${ttlSlot})`);
+    logger.info(`Calculated TTL (ms): ${ttlUnixMs} (slot: ${ttlSlot})`);
 
     return ttlUnixMs;
   } catch (error) {
-    console.error(`Failed to calculate TTL: ${error}`);
+    logger.error(`Failed to calculate TTL: ${error}`);
     throw new Error(
       `Unable to calculate TTL. ${
         error instanceof Error ? error.message : error
@@ -393,7 +400,7 @@ export const submitTransaction = async (
 
     const txHash = await blockfrostApi.txSubmit(txCbor);
 
-    console.log(
+    logger.info(
       `Transaction successfully submitted. Transaction ID: ${txHash}`
     );
 

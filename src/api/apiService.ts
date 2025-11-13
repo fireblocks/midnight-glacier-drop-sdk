@@ -12,6 +12,8 @@ import {
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
   makeClaimsOpts,
+  registerScavengerHuntAddressOpts,
+  RegistrationReceipt,
   SdkManagerMetrics,
   SubmitClaimResponse,
   TransactionType,
@@ -19,9 +21,12 @@ import {
   trasnsferClaimsOpts,
 } from "../types.js";
 import { FireblocksMidnightSDK } from "../FireblocksMidnightSDK.js";
+import { Logger } from "../utils/logger.js";
 
 export class FbNightApiService {
   private sdkManager: SdkManager;
+
+  private logger = new Logger("api:api-service");
 
   constructor(config: ApiServiceConfig) {
     if (!config || typeof config !== "object") {
@@ -81,6 +86,7 @@ export class FbNightApiService {
     | ClaimHistoryResponse[]
     | SubmitClaimResponse[]
     | VaultWalletAddress[]
+    | RegistrationReceipt
   > => {
     let sdk: FireblocksMidnightSDK | undefined;
     try {
@@ -94,7 +100,8 @@ export class FbNightApiService {
         | TransferClaimsResponse
         | ClaimHistoryResponse[]
         | SubmitClaimResponse[]
-        | VaultWalletAddress[];
+        | VaultWalletAddress[]
+        | RegistrationReceipt;
       switch (transactionType) {
         case TransactionType.CHECK_ADDRESS_ALLOCATION:
           result = await sdk.checkAddressAllocation(
@@ -120,8 +127,9 @@ export class FbNightApiService {
           );
           break;
 
+
         default:
-          console.error(
+          this.logger.error(
             `Unknown transaction type: ${transactionType} for vault ${vaultAccountId}`
           );
           throw new Error(`Unknown transaction type: ${transactionType}`);
@@ -129,7 +137,7 @@ export class FbNightApiService {
 
       return result;
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error executing ${transactionType} for vault ${vaultAccountId}:`,
         error
       );

@@ -15,22 +15,31 @@ import {
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
   makeClaimsOpts,
+  registerScavengerHuntAddressOpts,
+  RegistrationReceipt,
   SubmitClaimResponse,
   SupportedAssetIds,
   SupportedBlockchains,
   TransferClaimsResponse,
   trasnsferClaimsOpts,
 } from "./types.js";
-import { nightTokenName, tokenTransactionFee } from "./constants.js";
+import {
+  nightTokenName,
+  scavengerHuntMessage,
+  tokenTransactionFee,
+} from "./constants.js";
 import { getAssetIdsByBlockchain } from "./utils/general.js";
 import { calculateTtl, fetchAndSelectUtxos } from "./utils/cardano.utils.js";
 
 import { config } from "./utils/config.js";
+import { ScavengerHuntService } from "./services/scavengerHunt.service.js";
+import { Logger } from "./utils/logger.js";
 
 export class FireblocksMidnightSDK {
   private fireblocksService: FireblocksService;
   private claimApiService: ClaimApiService;
   private provetreeService: ProvetreeService;
+  private scavengerHuntService: ScavengerHuntService;
   private assetId: SupportedAssetIds;
   private vaultAccountId: string;
   private address: string;
@@ -41,6 +50,7 @@ export class FireblocksMidnightSDK {
     fireblocksService: FireblocksService;
     claimApiService: ClaimApiService;
     provetreeService: ProvetreeService;
+    scavengerHuntService: ScavengerHuntService;
     assetId: SupportedAssetIds;
     vaultAccountId: string;
     address: string;
@@ -49,6 +59,7 @@ export class FireblocksMidnightSDK {
     this.fireblocksService = params.fireblocksService;
     this.claimApiService = params.claimApiService;
     this.provetreeService = params.provetreeService;
+    this.scavengerHuntService = params.scavengerHuntService;
     this.assetId = params.assetId;
     this.vaultAccountId = params.vaultAccountId;
     this.address = params.address;
@@ -74,6 +85,8 @@ export class FireblocksMidnightSDK {
     chain: SupportedBlockchains;
   }): Promise<FireblocksMidnightSDK> => {
     try {
+      const logger = new Logger(`app:${params.chain}:fireblocks-midnight-sdk`);
+
       const { fireblocksConfig, vaultAccountId, chain } = params;
       const assetId = getAssetIdsByBlockchain(chain);
       if (!assetId) {
@@ -88,18 +101,20 @@ export class FireblocksMidnightSDK {
 
       const blockfrostProjectId = config.BLOCKFROST_PROJECT_ID;
       if (!blockfrostProjectId) {
-        console.warn(
-          "[warn] BLOCKFROST_PROJECT_ID is not configured. Some features may not work."
+        logger.warn(
+          "BLOCKFROST_PROJECT_ID is not configured. Some features may not work."
         );
       }
 
       const claimApiService = new ClaimApiService();
       const provetreeService = new ProvetreeService();
+      const scavengerHuntService = new ScavengerHuntService();
 
       const sdkInstance = new FireblocksMidnightSDK({
         fireblocksService,
         claimApiService,
         provetreeService,
+        scavengerHuntService,
         assetId,
         vaultAccountId,
         address,
@@ -198,15 +213,14 @@ export class FireblocksMidnightSDK {
           chain as SupportedBlockchains
         );
 
-      const fbResoponse = await this.fireblocksService.signMessage(
-        chain as SupportedBlockchains,
-        this.assetId,
-        this.vaultAccountId,
+      const fbResoponse = await this.fireblocksService.signMessage({
+        chain: chain as SupportedBlockchains,
+        originVaultAccountId: this.vaultAccountId,
         destinationAddress,
-        allocationValue,
-        this.vaultAccountId,
-        originAddress
-      );
+        amount: allocationValue,
+        vaultName: this.vaultAccountId,
+        originAddress,
+      });
 
       if (
         !fbResoponse ||
@@ -302,7 +316,10 @@ export class FireblocksMidnightSDK {
           ? "Preprod"
           : "Preview";
         this.lucid = await lucid.Lucid.new(
-          new lucid.Blockfrost(this.blockfrostProjectId, this.blockfrostProjectId),
+          new lucid.Blockfrost(
+            this.blockfrostProjectId,
+            this.blockfrostProjectId
+          ),
           network
         );
       }
@@ -499,4 +516,5 @@ export class FireblocksMidnightSDK {
       );
     }
   };
+
 }

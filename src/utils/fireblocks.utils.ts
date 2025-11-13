@@ -11,6 +11,14 @@ import { SupportedAssetIds, SupportedBlockchains } from "../types.js";
 import { convertStringToHex } from "xrpl";
 import { encode } from "ripple-binary-codec";
 import { hashTx } from "xrpl/dist/npm/utils/hashes/index.js";
+import { getAssetIdsByBlockchain } from "../index.js";
+import { Logger, LogLevel } from "./logger.js";
+
+const logLevel = "INFO";
+Logger.setLogLevel(
+  LogLevel[logLevel as keyof typeof LogLevel] || LogLevel.INFO
+);
+const logger = new Logger("utils:fireblocks");
 
 /**
  * Generates a transaction payload for signing messages on various blockchains.
@@ -28,12 +36,15 @@ import { hashTx } from "xrpl/dist/npm/utils/hashes/index.js";
 export const generateTransactionPayload = async (
   payload: string,
   chain: SupportedBlockchains,
-  assetId: SupportedAssetIds,
   originVaultAccountId: string,
   fireblocks: Fireblocks,
   note?: string
 ): Promise<TransactionRequest> => {
   try {
+    const assetId = getAssetIdsByBlockchain(chain);
+    if (!assetId) {
+      throw new Error("Unsupported blockchain for asset ID retrieval.");
+    }
     switch (chain) {
       case SupportedBlockchains.CARDANO:
         const { MSL } = await import("cardano-web3-js");
@@ -234,7 +245,7 @@ export const getTxStatus = async (
     let txResponse: FireblocksResponse<TransactionResponse> =
       await fireblocks.transactions.getTransaction({ txId });
     let lastStatus = txResponse.data.status;
-    console.log(
+    logger.info(
       `Transaction ${txResponse.data.id} is currently at status - ${txResponse.data.status}`
     );
 
@@ -248,7 +259,7 @@ export const getTxStatus = async (
       });
 
       if (txResponse.data.status !== lastStatus) {
-        console.log(
+        logger.info(
           `Transaction ${txResponse.data.id} is currently at status - ${txResponse.data.status}`
         );
         lastStatus = txResponse.data.status;
