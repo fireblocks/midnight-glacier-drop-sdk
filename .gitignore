@@ -13,7 +13,6 @@ yarn-error.log*
 build/
 dist/
 
-package-lock.json
 yarn.lock
 
 .env

@@ -1,6 +1,6 @@
 {
   "name": "midnight-drop-fireblocks-sdk",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "app.js",
   "type": "module",
   "scripts": {
@@ -32,7 +32,7 @@
   "dependencies": {
     "@blockfrost/blockfrost-js": "^6.0.0",
     "@fireblocks/fireblocks-web3-provider": "^1.3.17",
-    "@fireblocks/ts-sdk": "^10.3.0",
+    "@fireblocks/ts-sdk": "^12.1.2",
     "@solana/web3.js": "^1.98.2",
     "axios": "^1.10.0",
     "body-parser": "^2.2.0",
