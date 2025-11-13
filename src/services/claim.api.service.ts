@@ -12,7 +12,7 @@ import { Logger } from "../utils/logger.js";
  * Service for interacting with the Midnight claim API, providing methods for querying and creating claims across supported blockchains.
  */
 export class ClaimApiService {
-  private logger = new Logger("services:claim-api-service");
+  private readonly logger = new Logger("services:claim-api-service");
 
   /**
    * Fetches the full claims history for a particular address on a specified blockchain.

@@ -21,7 +21,7 @@ import { Logger } from "../utils/logger.js";
  */
 export class FireblocksService {
   private readonly fireblocksSDK: Fireblocks;
-  private logger = new Logger("services:fireblocks");
+  private readonly logger = new Logger("services:fireblocks");
 
   constructor(config: FireblocksConfig) {
     this.fireblocksSDK = new Fireblocks({

@@ -14,7 +14,7 @@ export class SdkManager {
   private poolConfig: PoolConfig;
   private cleanupInterval: NodeJS.Timeout;
 
-  private logger = new Logger("pool:sdk-manager");
+  private readonly logger = new Logger("pool:sdk-manager");
 
   constructor(
     baseConfig: ConfigurationOptions,

@@ -9,7 +9,7 @@ import { Logger } from "../../utils/logger.js";
 
 export class ApiController {
   api: FbNightApiService;
-  private logger = new Logger("api:controller");
+  private readonly logger = new Logger("api:controller");
   constructor(api: FbNightApiService) {
     this.api = api;
   }

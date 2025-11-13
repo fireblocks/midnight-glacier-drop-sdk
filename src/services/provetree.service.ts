@@ -7,7 +7,7 @@ import { Logger } from "../utils/logger.js";
  * Service for interacting with the Provetree API, providing methods to check addresses and retrieve proof data.
  */
 export class ProvetreeService {
-  private logger = new Logger("services:provetree");
+  private readonly logger = new Logger("services:provetree");
   /**
    * Fetches the allocation value of a blockchain address via the Provetree API.
    *

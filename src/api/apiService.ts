@@ -26,7 +26,7 @@ import { Logger } from "../utils/logger.js";
 export class FbNightApiService {
   private sdkManager: SdkManager;
 
-  private logger = new Logger("api:api-service");
+  private readonly logger = new Logger("api:api-service");
 
   constructor(config: ApiServiceConfig) {
     if (!config || typeof config !== "object") {
@@ -127,6 +127,11 @@ export class FbNightApiService {
           );
           break;
 
+        case TransactionType.REGISTER_SCAVENGER_HUNT_ADDRESS:
+          result = await sdk.registerScavengerHuntAddress(
+            params as registerScavengerHuntAddressOpts
+          );
+          break;
 
         default:
           this.logger.error(
