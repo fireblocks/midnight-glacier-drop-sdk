@@ -1,6 +1,5 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
-import bodyParser from "body-parser";
 import { config } from "./utils/config.js";
 import { Express } from "express-serve-static-core";
 import { configureRouter } from "./api/router.js";
@@ -57,7 +56,7 @@ const startServer = () => {
   app.use("/docs", express.static(path.join(__dirname, "../docs")));
 
   app.listen(config.PORT, () => {
-    logger.info(`Example app listening on port ${config.PORT}`);
+    logger.info(`Fireblocks-Midnight SDK listening on port ${config.PORT}`);
   });
 };
 
@@ -67,7 +66,6 @@ const configureMiddlewares = (app: Express) => {
       origin: [`http://localhost:${config.CLIENT_PORT}`],
     })
   );
-  app.use(bodyParser.json());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 };
