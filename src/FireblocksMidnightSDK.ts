@@ -23,13 +23,13 @@ import {
   TransferClaimsResponse,
   trasnsferClaimsOpts,
 } from "./types.js";
-import {
-  nightTokenName,
-  scavengerHuntMessage,
-  tokenTransactionFee,
-} from "./constants.js";
+import { nightTokenName, tokenTransactionFee } from "./constants.js";
 import { getAssetIdsByBlockchain } from "./utils/general.js";
-import { calculateTtl, fetchAndSelectUtxos } from "./utils/cardano.utils.js";
+import {
+  buildCoseSign1,
+  calculateTtl,
+  fetchAndSelectUtxos,
+} from "./utils/cardano.utils.js";
 
 import { config } from "./utils/config.js";
 import { ScavengerHuntService } from "./services/scavengerHunt.service.js";
@@ -45,6 +45,7 @@ export class FireblocksMidnightSDK {
   private address: string;
   private blockfrostProjectId?: string;
   private lucid?: lucid.Lucid;
+  private readonly logger = new Logger("app:fireblocks-midnight-sdk");
 
   constructor(params: {
     fireblocksService: FireblocksService;
@@ -517,4 +518,59 @@ export class FireblocksMidnightSDK {
     }
   };
 
+  public registerScavengerHuntAddress = async ({
+    vaultAccountId,
+  }: registerScavengerHuntAddressOpts): Promise<RegistrationReceipt> => {
+    try {
+      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+        vaultAccountId,
+        SupportedAssetIds.ADA
+      );
+
+      const termsResponse = await fetch(
+        "https://scavenger.prod.gd.midnighttge.io/TandC"
+      );
+      const terms = await termsResponse.json();
+      const messageToSign = terms.message;
+      const signedMessageResponse = await this.fireblocksService.signMessage({
+        chain: SupportedBlockchains.CARDANO,
+        originVaultAccountId: vaultAccountId,
+        destinationAddress: adaAddress,
+        amount: 0,
+        message: messageToSign,
+      });
+
+      if (
+        !signedMessageResponse ||
+        !signedMessageResponse.content ||
+        !signedMessageResponse.publicKey ||
+        !signedMessageResponse.signature ||
+        !signedMessageResponse.signature.fullSig
+      ) {
+        throw new Error(
+          "Invalid Fireblocks response: missing signature or public key"
+        );
+      }
+
+      const fullSig = signedMessageResponse.signature.fullSig;
+      const publicKey = signedMessageResponse.publicKey;
+
+      const coseSign1Hex = await buildCoseSign1(
+        messageToSign,
+        fullSig!,
+      );
+
+      return await this.scavengerHuntService.register({
+        destinationAddress: adaAddress,
+        signature: coseSign1Hex,
+        pubkey: publicKey,
+      });
+    } catch (error: any) {
+      throw new Error(
+        `Error in registerScavengerHuntAddress: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
+  };
 }
