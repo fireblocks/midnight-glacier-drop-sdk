@@ -17,6 +17,7 @@ import {
   makeClaimsOpts,
   registerScavengerHuntAddressOpts,
   RegistrationReceipt,
+  ScavangerHuntChallangeResponse,
   SubmitClaimResponse,
   SupportedAssetIds,
   SupportedBlockchains,
@@ -555,10 +556,7 @@ export class FireblocksMidnightSDK {
       const fullSig = signedMessageResponse.signature.fullSig;
       const publicKey = signedMessageResponse.publicKey;
 
-      const coseSign1Hex = await buildCoseSign1(
-        messageToSign,
-        fullSig!,
-      );
+      const coseSign1Hex = await buildCoseSign1(messageToSign, fullSig!);
 
       return await this.scavengerHuntService.register({
         destinationAddress: adaAddress,
@@ -570,6 +568,18 @@ export class FireblocksMidnightSDK {
         `Error in registerScavengerHuntAddress: ${
           error instanceof Error ? error.message : error
         }`
+      );
+    }
+  };
+
+  public getScavengerHuntChallenge = async (): Promise<ScavangerHuntChallangeResponse> => {
+    try {
+      const challenge = await this.scavengerHuntService.getChallenge();
+      return challenge;
+    } catch (error: any) {
+      throw new Error(
+        `Error in getScavengerHuntChallenge:
+        ${error instanceof Error ? error.message : error}`
       );
     }
   };

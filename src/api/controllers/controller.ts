@@ -182,6 +182,22 @@ export class ApiController {
     }
   };
 
+  public getScavengerHuntChallenge = async (req: Request, res: Response) => {
+    try {
+      const addresses = await this.api.executeTransaction({
+        vaultAccountId: "0",
+        chain: SupportedBlockchains.CARDANO,
+        transactionType: TransactionType.GET_SCAVENGER_HUNT_CHALLENGE,
+        params: { vaultAccountId: "0" },
+      });
+
+      res.status(200).json({ addresses: addresses });
+    } catch (error: any) {
+      this.logger.error("getVaultAccountAddresses:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
   public registerScavengerHuntAddress = async (req: Request, res: Response) => {
     const { vaultAccountId } = req.params;
     try {

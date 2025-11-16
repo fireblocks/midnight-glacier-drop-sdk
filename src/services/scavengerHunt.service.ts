@@ -2,10 +2,10 @@ import axios from "axios";
 import { scavengerHuntBaseUrl } from "../constants.js";
 import {
   RegistrationReceipt,
-  ChallengeResponse,
   SolutionResponse,
   DonationResponse,
   TermsAndConditions,
+  ScavangerHuntChallangeResponse,
 } from "../types.js";
 import { Logger } from "../utils/logger.js";
 
@@ -85,7 +85,7 @@ export class ScavengerHuntService {
   /**
    * Get the current challenge
    */
-  public getChallenge = async (): Promise<ChallengeResponse> => {
+  public getChallenge = async (): Promise<ScavangerHuntChallangeResponse> => {
     try {
       const response = await axios.get(`${scavengerHuntBaseUrl}/challenge`);
 

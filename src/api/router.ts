@@ -78,6 +78,16 @@ export const configureRouter = (api: FbNightApiService): Router => {
     apiController.getVaultAccountAddresses
   );
 
+  router.get(
+    "/vaults/:chain/:vaultAccountId",
+    apiController.getVaultAccountAddresses
+  );
+
+  router.get(
+    "/scavenger-hunt/challenge",
+    apiController.getScavengerHuntChallenge
+  );
+
   /**
    * @openapi
    * /api/transfer:
@@ -133,12 +143,12 @@ export const configureRouter = (api: FbNightApiService): Router => {
    *       200:
    *         description: Claims processed
    */
-  router
-    .post("/claims/:chain", apiController.makeClaims)
-    .post(
-      "/register/:vaultAccountId",
-      apiController.registerScavengerHuntAddress
-    );
+  router.post("/claims/:chain", apiController.makeClaims);
+
+  router.post(
+    "/scavenger-hunt/register/:vaultAccountId",
+    apiController.registerScavengerHuntAddress
+  );
 
   return router;
 };

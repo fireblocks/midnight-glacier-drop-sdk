@@ -29,6 +29,7 @@ export enum TransactionType {
   TRANSFER_CLAIMS = "transferClaims",
   GET_VAULT_ACCOUNT_ADDRESSES = "getVaultAccountAddresses",
   REGISTER_SCAVENGER_HUNT_ADDRESS = "registerScavengerHuntAddress",
+  GET_SCAVENGER_HUNT_CHALLENGE = "getScavengerHuntChallenge",
 }
 
 export interface checkAddressAllocationOpts {
@@ -184,17 +185,6 @@ export interface Challenge {
   no_pre_mine_hour: string;
 }
 
-export interface ChallengeResponse {
-  code: "before" | "active" | "after";
-  challenge?: Challenge;
-  mining_period_ends?: string;
-  max_day?: number;
-  total_challenges?: number;
-  current_day?: number;
-  next_challenge_starts_at?: string;
-  starts_at?: string; // When code is "before"
-}
-
 export interface SolutionResponse {
   crypto_receipt: {
     preimage: string;
@@ -215,4 +205,24 @@ export interface DonationResponse {
 
 export interface WorkToStarRate {
   rates: number[];
+}
+
+export interface ScavangerHuntChallange {
+  challenge_id: string;
+  difficulty: string;
+  no_pre_mine: string;
+  no_pre_mine_hour: string;
+  latest_submission: Date;
+  challenge_number: number;
+  day: number;
+  issued_at: Date;
+}
+export interface ScavangerHuntChallangeResponse {
+  code: "before" | "active" | "after";
+  challenge: ScavangerHuntChallange;
+  mining_period_ends: Date;
+  max_day: number;
+  total_challenges: number;
+  current_day: number;
+  next_challenge_starts_at: Date;
 }

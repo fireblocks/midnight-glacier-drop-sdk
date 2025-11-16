@@ -14,6 +14,7 @@ import {
   makeClaimsOpts,
   registerScavengerHuntAddressOpts,
   RegistrationReceipt,
+  ScavangerHuntChallangeResponse,
   SdkManagerMetrics,
   SubmitClaimResponse,
   TransactionType,
@@ -87,6 +88,7 @@ export class FbNightApiService {
     | SubmitClaimResponse[]
     | VaultWalletAddress[]
     | RegistrationReceipt
+    | ScavangerHuntChallangeResponse
   > => {
     let sdk: FireblocksMidnightSDK | undefined;
     try {
@@ -101,7 +103,8 @@ export class FbNightApiService {
         | ClaimHistoryResponse[]
         | SubmitClaimResponse[]
         | VaultWalletAddress[]
-        | RegistrationReceipt;
+        | RegistrationReceipt
+        | ScavangerHuntChallangeResponse;
       switch (transactionType) {
         case TransactionType.CHECK_ADDRESS_ALLOCATION:
           result = await sdk.checkAddressAllocation(
@@ -131,6 +134,9 @@ export class FbNightApiService {
           result = await sdk.registerScavengerHuntAddress(
             params as registerScavengerHuntAddressOpts
           );
+
+        case TransactionType.GET_SCAVENGER_HUNT_CHALLENGE:
+          result = await sdk.getScavengerHuntChallenge();
           break;
 
         default:
