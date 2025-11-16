@@ -11,7 +11,7 @@ import {
   generateTransactionPayload,
   getTxStatus,
 } from "../utils/fireblocks.utils.js";
-import { termsAndConditionsHash } from "../constants.js";
+import { scavengerHuntNote, termsAndConditionsHash } from "../constants.js";
 import { SignMessageParams, SupportedAssetIds } from "../types.js";
 import { getAssetIdsByBlockchain } from "../utils/general.js";
 import { Logger } from "../utils/logger.js";
@@ -117,7 +117,7 @@ export class FireblocksService {
       // Format the amount for display (convert from smallest unit)
       const displayAmount = (amount / Math.pow(10, 6)).toFixed(6);
       const note = message
-        ? "register address for scavenger hunt"
+        ? scavengerHuntNote
         : vaultName && originAddress
         ? `Claiming ${displayAmount} NIGHT for ${
             assetId || chain
