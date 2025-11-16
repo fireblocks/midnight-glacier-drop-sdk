@@ -28,6 +28,7 @@ export enum TransactionType {
   MAKE_CLAIMS = "makeClaims",
   TRANSFER_CLAIMS = "transferClaims",
   GET_VAULT_ACCOUNT_ADDRESSES = "getVaultAccountAddresses",
+  REGISTER_SCAVENGER_HUNT_ADDRESS = "registerScavengerHuntAddress",
 }
 
 export interface checkAddressAllocationOpts {
@@ -65,6 +66,10 @@ export interface ExecuteTransactionOpts {
     | makeClaimsOpts
     | trasnsferClaimsOpts
     | getVaultAccountAddressesOpts;
+}
+
+export interface registerScavengerHuntAddressOpts {
+  vaultAccountId: string;
 }
 
 export interface SdkManagerMetrics {
@@ -136,4 +141,78 @@ export interface ClaimHistoryResponse {
   leaf_index: number;
   status: string;
   transaction_id: string | number | null;
+}
+
+export interface SignMessageParams {
+  chain: SupportedBlockchains;
+  originVaultAccountId: string;
+  destinationAddress: string;
+  amount: number;
+  vaultName?: string;
+  originAddress?: string;
+  message?: string;
+}
+
+export interface RegistrationReceipt {
+  preimage: string;
+  signature: string;
+  timestamp: string;
+}
+
+export interface TermsAndConditions {
+  version: string;
+  content: string;
+  message: string;
+}
+
+export interface RegistrationReceipt {
+  registrationReceipt: {
+    preimage: string;
+    signature: string;
+    timestamp: string;
+  };
+}
+
+export interface Challenge {
+  challenge_id: string;
+  challenge_number: number;
+  day: number;
+  issued_at: string;
+  latest_submission: string;
+  difficulty: string;
+  no_pre_mine: string;
+  no_pre_mine_hour: string;
+}
+
+export interface ChallengeResponse {
+  code: "before" | "active" | "after";
+  challenge?: Challenge;
+  mining_period_ends?: string;
+  max_day?: number;
+  total_challenges?: number;
+  current_day?: number;
+  next_challenge_starts_at?: string;
+  starts_at?: string; // When code is "before"
+}
+
+export interface SolutionResponse {
+  crypto_receipt: {
+    preimage: string;
+    timestamp: string;
+    signature: string;
+  };
+}
+
+export interface DonationResponse {
+  status: string;
+  message: string;
+  donation_id: string;
+  original_address: string;
+  destination_address: string;
+  timestamp: string;
+  solutions_consolidated: number;
+}
+
+export interface WorkToStarRate {
+  rates: number[];
 }
