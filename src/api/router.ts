@@ -133,7 +133,12 @@ export const configureRouter = (api: FbNightApiService): Router => {
    *       200:
    *         description: Claims processed
    */
-  router.post("/claims/:chain", apiController.makeClaims);
+  router
+    .post("/claims/:chain", apiController.makeClaims)
+    .post(
+      "/register/:vaultAccountId",
+      apiController.registerScavengerHuntAddress
+    );
 
   return router;
 };
