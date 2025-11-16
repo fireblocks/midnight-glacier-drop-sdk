@@ -183,13 +183,13 @@ export class ApiController {
   };
 
   public registerScavengerHuntAddress = async (req: Request, res: Response) => {
-    const { vaultAccountId, destinationAddress } = req.params;
+    const { vaultAccountId } = req.params;
     try {
       const addresses = await this.api.executeTransaction({
         vaultAccountId,
         chain: SupportedBlockchains.CARDANO,
         transactionType: TransactionType.REGISTER_SCAVENGER_HUNT_ADDRESS,
-        params: { vaultAccountId, destinationAddress },
+        params: { vaultAccountId },
       });
 
       res.status(200).json({ addresses: addresses });
