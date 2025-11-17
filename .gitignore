@@ -1,5 +1,8 @@
 node_modules/
 secrets/
+!vendor/
+!vendor/ashmaize/
+!vendor/ashmaize/**
 
 .npm
 .npmrc
