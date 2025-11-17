@@ -315,6 +315,7 @@ export class ApiController {
 
       res.status(statusCode).json({
         error: error.message,
+        statusCode: error.statusCode,
         type: error.errorType,
         info: error.errorInfo,
         service: error.service,
