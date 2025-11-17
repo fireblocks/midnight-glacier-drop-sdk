@@ -192,7 +192,7 @@ export class Logger {
    * @param data Data to append
    */
   appendData(filename: string, data: any): void {
-    const filepath = path.join(Logger.dataDir, `${filename}.jsonl`);
+    const filepath = path.join(Logger.dataDir, `${filename}.json`);
     const timestamp = new Date().toISOString();
 
     const entry = {
