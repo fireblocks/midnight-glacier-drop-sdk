@@ -22,6 +22,19 @@ export interface ApiServiceConfig {
   poolConfig?: Partial<PoolConfig>;
 }
 
+export class MidnightApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode?: number,
+    public errorType?: string,
+    public errorInfo?: any,
+    public service?: string
+  ) {
+    super(message);
+    this.name = "FbMidnightSdkError";
+  }
+}
+
 export enum TransactionType {
   CHECK_ADDRESS_ALLOCATION = "checkAddressAllocation",
   GET_CLAIMS_HISTORY = "getClaimsHistory",
