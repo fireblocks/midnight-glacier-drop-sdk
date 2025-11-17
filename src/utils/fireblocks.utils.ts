@@ -11,7 +11,7 @@ import { SupportedAssetIds, SupportedBlockchains } from "../types.js";
 import { convertStringToHex } from "xrpl";
 import { encode } from "ripple-binary-codec";
 import { hashTx } from "xrpl/dist/npm/utils/hashes/index.js";
-import { getAssetIdsByBlockchain, scavengerHuntNote } from "../index.js";
+import { getAssetIdsByBlockchain } from "../index.js";
 import { Logger, LogLevel } from "./logger.js";
 
 const logLevel = "INFO";
@@ -38,7 +38,8 @@ export const generateTransactionPayload = async (
   chain: SupportedBlockchains,
   originVaultAccountId: string,
   fireblocks: Fireblocks,
-  note?: string
+  note?: string,
+  noteType?: "claim" | "donate" | "register"
 ): Promise<TransactionRequest> => {
   try {
     const assetId = getAssetIdsByBlockchain(chain);
@@ -64,8 +65,8 @@ export const generateTransactionPayload = async (
         const builder = MSL.COSESign1Builder.new(headers, payloadBytes, false);
         const sigStructureBytes = builder.make_data_to_sign().to_bytes();
         const content = Buffer.from(sigStructureBytes).toString("hex");
-        const bip44change = note === scavengerHuntNote ? 0 : 2;
-        
+        const bip44change = noteType === "donate" || "register" ? 0 : 2;
+
         return {
           source: {
             type: TransferPeerPathType.VaultAccount,
