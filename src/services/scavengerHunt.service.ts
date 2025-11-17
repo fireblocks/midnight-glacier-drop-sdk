@@ -6,12 +6,18 @@ import {
   TermsAndConditions,
   ScavangerHuntChallangeResponse,
   DonateToScavengerHuntResponse,
+  MidnightApiError,
 } from "../types.js";
 import { Logger } from "../utils/logger.js";
 import { AshMaize } from "../utils/ashmaize.js";
+import { ErrorHandler } from "../utils/errorHandler.js";
 
 export class ScavengerHuntService {
   private readonly logger = new Logger("services:scavenger-hunt");
+  private readonly errorHandler = new ErrorHandler(
+    "scavenger-hunt",
+    this.logger
+  );
 
   /**
    * Get Terms and Conditions that need to be signed
@@ -27,19 +33,16 @@ export class ScavengerHuntService {
       if (response.status === 200) {
         this.logger.info("Successfully fetched Terms and Conditions");
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error("Status:", error.response?.status);
-        this.logger.error("Response Data:", error.response?.data);
-      }
-      this.logger.error(
-        "Error fetching T&C:",
-        error instanceof Error ? error.message : error
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
       );
-      throw error;
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(
+        error,
+        "fetching Terms and Conditions"
+      );
     }
   };
 
@@ -61,25 +64,16 @@ export class ScavengerHuntService {
       if (response.status === 200 || response.status === 201) {
         this.logger.info(`Successfully registered ${destinationAddress}`);
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error("Status:", error.response?.status);
-        this.logger.error("Response Data:", error.response?.data);
-        this.logger.error("Request URL:", error.config?.url);
-        throw new Error(
-          error.response?.data?.message ||
-            error.response ||
-            "Error registering address"
-        );
-      }
-      this.logger.error(
-        `Error registering ${params.destinationAddress}:`,
-        error instanceof Error ? error.message : error
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
       );
-      throw error;
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(
+        error,
+        `registering address ${params.destinationAddress}`
+      );
     }
   };
 
@@ -96,19 +90,13 @@ export class ScavengerHuntService {
           `Fetched challenge: Day ${challenge.current_day}, Challenge ${challenge.challenge.challenge_number}`
         );
         return challenge;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error("Status:", error.response?.status);
-        this.logger.error("Response Data:", error.response?.data);
-      }
-      this.logger.error(
-        "Error fetching challenge:",
-        error instanceof Error ? error.message : error
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
       );
-      throw error;
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(error, "fetching challenge");
     }
   };
 
@@ -128,41 +116,22 @@ export class ScavengerHuntService {
       );
 
       const response = await axios.post(
-        `${scavengerHuntBaseUrl}/solution/${address}/${challengeId}/${nonce}`,
-        {}
+        `${scavengerHuntBaseUrl}/solution/${address}/${challengeId}/${nonce}`
       );
       this.logger.info("Submit Solution Response:", response.data);
       if (response.status === 200) {
         this.logger.info(`Solution accepted for ${challengeId}`);
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error("Status:", error.response?.status);
-        this.logger.error("Response Data:", error.response?.data);
-
-        if (
-          error.response?.data?.message?.includes("Address is not registered")
-        ) {
-          throw new Error("Address is not registered. Please register first.");
-        } else if (
-          error.response?.data?.message?.includes("does not meet difficulty")
-        ) {
-          throw new Error("Solution does not meet difficulty requirements.");
-        } else if (
-          error.response?.data?.message?.includes("Challenge not found")
-        ) {
-          throw new Error("Challenge not found or expired.");
-        }
-      }
-
-      this.logger.error(
-        `Error submitting solution:`,
-        error instanceof Error ? error.message : error
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
       );
-      throw error;
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(
+        error,
+        `submitting solution for challenge ${params.challengeId}`
+      );
     }
   };
 
@@ -345,34 +314,16 @@ export class ScavengerHuntService {
           `Successfully consolidated ${response.data.solutions_consolidated} solutions`
         );
         return response.data;
-      } else {
-        this.logger.error("Donate Response Data:", response.data);
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error("Response:", error.response);
-        this.logger.error("Status:", error.response?.status);
-        this.logger.error("Response Data:", error.response?.data);
-
-        if (error.response?.data?.message?.includes("not registered")) {
-          throw new Error("Original address is not registered.");
-        } else if (
-          error.response?.data?.message?.includes(
-            "already has an active donation"
-          )
-        ) {
-          throw new Error(
-            "Original address already has an active donation assignment."
-          );
-        }
-      }
-
-      this.logger.error(
-        `Error consolidating addresses:`,
-        error instanceof Error ? error.message : error
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
       );
-      throw error;
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(
+        error,
+        `donating rewards from ${params.originalAddress} to ${params.destinationAddress}`
+      );
     }
   };
 
@@ -390,19 +341,16 @@ export class ScavengerHuntService {
           `Fetched work to star rates for ${response.data.length} days`
         );
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error("Status:", error.response?.status);
-        this.logger.error("Response Data:", error.response?.data);
-      }
-      this.logger.error(
-        "Error fetching star rates:",
-        error instanceof Error ? error.message : error
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
       );
-      throw error;
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(
+        error,
+        "fetching work to star rates"
+      );
     }
   };
 

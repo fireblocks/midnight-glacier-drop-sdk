@@ -1,3 +1,4 @@
+import axios from "axios";
 import { redemptionPhaseBaseUrl } from "../constants.js";
 import {
   PhaseConfigResponse,
@@ -7,12 +8,15 @@ import {
   TransactionSubmissionRequest,
   ThawTransactionResponse,
   ThawTransactionStatus,
+  MidnightApiError,
 } from "../types.js";
 import axiosInstance from "../utils/httpClient.js";
 import { Logger } from "../utils/logger.js";
+import { ErrorHandler } from "../utils/errorHandler.js";
 
 export class ThawsService {
   private readonly logger = new Logger("services:thaws-service");
+  private readonly errorHandler = new ErrorHandler("thaws", this.logger);
 
   /**
    * Get current thaws phase configuration
@@ -26,12 +30,17 @@ export class ThawsService {
 
       if (response.status === 200) {
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
+
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
+      );
     } catch (error: any) {
-      this.logger.error("Error fetching phase configuration:", error.message);
-      throw error;
+      throw this.errorHandler.handleApiError(
+        error,
+        "fetching phase configuration"
+      );
     }
   };
 
@@ -50,16 +59,17 @@ export class ThawsService {
 
       if (response.status === 200) {
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      this.logger.error(
-        `Error fetching thaw schedule for ${destAddress}:`,
-        error.message
-      );
 
-      throw error;
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
+      );
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(
+        error,
+        `fetching thaw schedule for ${destAddress}`
+      );
     }
   };
 
@@ -76,22 +86,23 @@ export class ThawsService {
       this.logger.info(`Building thaw transaction for address: ${destAddress}`);
 
       const url = `${redemptionPhaseBaseUrl}/thaws/${destAddress}/transactions/build`;
-      const response = await axiosInstance.post<TransactionBuildResponse>(
-        url,
-        [request] // API expects an array with a single object
-      );
+      const response = await axiosInstance.post<TransactionBuildResponse>(url, [
+        request,
+      ]);
 
       if (response.status === 200) {
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      this.logger.error(
-        `Error building thaw transaction for ${destAddress}:`,
-        error.message
+
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
       );
-      throw error;
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(
+        error,
+        `building thaw transaction for ${destAddress}`
+      );
     }
   };
 
@@ -110,22 +121,23 @@ export class ThawsService {
       );
 
       const url = `${redemptionPhaseBaseUrl}/thaws/${destAddress}/transactions`;
-      const response = await axiosInstance.post<ThawTransactionResponse>(
-        url,
-        [request] // API expects an array with a single object
-      );
+      const response = await axiosInstance.post<ThawTransactionResponse>(url, [
+        request,
+      ]);
 
       if (response.status === 200) {
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      this.logger.error(
-        `Error submitting thaw transaction for ${destAddress}:`,
-        error.message
+
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
       );
-      throw error;
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(
+        error,
+        `submitting thaw transaction for ${destAddress}`
+      );
     }
   };
 
@@ -148,21 +160,22 @@ export class ThawsService {
 
       if (response.status === 200) {
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
-    } catch (error: any) {
-      this.logger.error(
-        `Error fetching transaction status for ${transactionId}:`,
-        error.message
+
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
       );
-      throw error;
+    } catch (error: any) {
+      throw this.errorHandler.handleApiError(
+        error,
+        `fetching transaction status for ${transactionId}`
+      );
     }
   };
 
   public isRedemptionWindowOpen = (config: PhaseConfigResponse): boolean => {
-    const now = Date.now() / 1000; // Current timestamp in seconds
-
+    const now = Date.now() / 1000;
     const startTime = config.genesis_timestamp;
     const totalDuration =
       config.redemption_increment_period * config.redemption_increments;
@@ -171,7 +184,6 @@ export class ThawsService {
     return now >= startTime && now <= endTime;
   };
 
-  // Get window times
   public getRedemptionWindowTimes = (config: PhaseConfigResponse) => {
     const startTime = config.genesis_timestamp;
     const totalDuration =

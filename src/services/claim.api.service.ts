@@ -2,18 +2,21 @@ import axios from "axios";
 import { midnightClaimAddress } from "../constants.js";
 import {
   ClaimHistoryResponse,
+  MidnightApiError,
   SubmitClaimResponse,
   SupportedBlockchains,
 } from "../types.js";
 import axiosInstance from "../utils/httpClient.js";
 import { Logger } from "../utils/logger.js";
 import { buildCoseSign1 } from "../utils/cardano.utils.js";
+import { ErrorHandler } from "../utils/errorHandler.js";
 
 /**
  * Service for interacting with the Midnight claim API, providing methods for querying and creating claims across supported blockchains.
  */
 export class ClaimApiService {
   private readonly logger = new Logger("services:claim-api-service");
+  private readonly errorHandler = new ErrorHandler("claims", this.logger);
 
   /**
    * Fetches the full claims history for a particular address on a specified blockchain.
@@ -35,23 +38,16 @@ export class ClaimApiService {
 
       if (response.status === 200) {
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
+      );
     } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error("Status:", error.response?.status);
-        this.logger.error("Status Text:", error.response?.statusText);
-        this.logger.error("Response Data:", error.response?.data);
-        this.logger.error("Request URL:", error.config?.url);
-        throw new Error(
-          error.response?.data?.[0]?.error?.message ||
-            error.response ||
-            "Error fetching claims data"
-        );
-      }
-      this.logger.error("Unexpected error:", error);
-      throw new Error(error.message || "Error getting claims history");
+      throw this.errorHandler.handleApiError(
+        error,
+        `fetching claims history for ${address} on ${blockchainId}`
+      );
     }
   };
 
@@ -147,25 +143,16 @@ export class ClaimApiService {
 
       if (response.status === 200) {
         return response.data;
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`);
       }
+      throw new MidnightApiError(
+        `Unexpected response status: ${response.status}`,
+        response.status
+      );
     } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error("Axios error! - makeClaims");
-        this.logger.error("Status:", error.response?.status);
-        this.logger.error("Status Text:", error.response?.statusText);
-        this.logger.error("Response Data:", error.response?.data);
-        this.logger.error("Request URL:", error.config?.url);
-        throw new Error(
-          error.response?.data?.[0]?.error?.message ||
-            error.response?.data?.message ||
-            "Error making claims"
-        );
-      } else {
-        this.logger.error("Unexpected error:", error);
-        throw new Error(error.message || "Error making claims");
-      }
+      throw this.errorHandler.handleApiError(
+        error,
+        `making claim on ${chain} for address ${originAddress}`
+      );
     }
   };
 }
