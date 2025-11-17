@@ -18,6 +18,7 @@ import {
   registerScavengerHuntAddressOpts,
   RegistrationReceipt,
   ScavangerHuntChallangeResponse,
+  solveScavengerHuntChallengeOpts,
   SubmitClaimResponse,
   SupportedAssetIds,
   SupportedBlockchains,
@@ -572,15 +573,47 @@ export class FireblocksMidnightSDK {
     }
   };
 
-  public getScavengerHuntChallenge = async (): Promise<ScavangerHuntChallangeResponse> => {
+  public solveScavengerHuntChallenge = async ({
+    vaultAccountId,
+  }: solveScavengerHuntChallengeOpts): Promise<{
+    nonce: string;
+    hash: string;
+    attempts: bigint;
+    timeMs: number;
+  }> => {
     try {
-      const challenge = await this.scavengerHuntService.getChallenge();
-      return challenge;
+      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+        vaultAccountId,
+        SupportedAssetIds.ADA
+      );
+
+      const challengeResonse = await this.scavengerHuntService.getChallenge();
+
+      const challenge = challengeResonse.challenge;
+
+      return await this.scavengerHuntService.solveChallenge({
+        address: adaAddress,
+        challenge,
+      });
     } catch (error: any) {
       throw new Error(
-        `Error in getScavengerHuntChallenge:
-        ${error instanceof Error ? error.message : error}`
+        `Error in solveScavengerHuntChallenge: ${
+          error instanceof Error ? error.message : error
+        }`
       );
     }
   };
+
+  public getScavengerHuntChallenge =
+    async (): Promise<ScavangerHuntChallangeResponse> => {
+      try {
+        const challenge = await this.scavengerHuntService.getChallenge();
+        return challenge;
+      } catch (error: any) {
+        throw new Error(
+          `Error in getScavengerHuntChallenge:
+        ${error instanceof Error ? error.message : error}`
+        );
+      }
+    };
 }
