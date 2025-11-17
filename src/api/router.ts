@@ -146,7 +146,7 @@ export const configureRouter = (api: FbNightApiService): Router => {
   router.post("/claims/:chain", apiController.makeClaims);
 
   router.post(
-    "/scavenger-hunt/register/:vaultAccountId",
+    "/scavenger-hunt/register/:vaultAccountId/:index?",
     apiController.registerScavengerHuntAddress
   );
 
@@ -162,7 +162,10 @@ export const configureRouter = (api: FbNightApiService): Router => {
 
   router.get("/thaws/phase-config", apiController.getPhaseConfig);
 
-  router.get("/thaws/thaw-schedule/:vaultAccountId", apiController.getThawSchedule);
+  router.get(
+    "/thaws/thaw-schedule/:vaultAccountId/:index?",
+    apiController.getThawSchedule
+  );
 
   router.get(
     "/thaws/status/:destAddress/:transactionId",
