@@ -271,6 +271,13 @@ export class FireblocksMidnightSDK {
         publicKey
       );
 
+      this.logger.appendData("claims-history", {
+        address: claimResponse[0].address,
+        amount: claimResponse[0].amount,
+        claim_id: claimResponse[0].claim_id,
+        dest_address: claimResponse[0].dest_address,
+      });
+
       return claimResponse;
     } catch (error: any) {
       throw new Error(error instanceof Error ? error.message : error);
@@ -559,11 +566,23 @@ export class FireblocksMidnightSDK {
 
       const coseSign1Hex = await buildCoseSign1(messageToSign, fullSig!);
 
-      return await this.scavengerHuntService.register({
+      const result = await this.scavengerHuntService.register({
         destinationAddress: adaAddress,
         signature: coseSign1Hex,
         pubkey: publicKey,
       });
+
+      this.logger.saveData("registered-addresses", {
+        vaultAccountId: vaultAccountId,
+        address: adaAddress,
+        publicKey: publicKey,
+        timestamp: result.timestamp,
+        registrationReceipt: result.registrationReceipt,
+        preimage: result.preimage,
+        signature: result.signature,
+      });
+
+      return result;
     } catch (error: any) {
       throw new Error(
         `Error in registerScavengerHuntAddress: ${
@@ -591,10 +610,21 @@ export class FireblocksMidnightSDK {
 
       const challenge = challengeResonse.challenge;
 
-      return await this.scavengerHuntService.solveChallenge({
+      const result = await this.scavengerHuntService.solveChallenge({
         address: adaAddress,
         challenge,
       });
+
+      this.logger.appendData("mining-history", {
+        challengeId: challenge.challenge_id,
+        nonce: result.nonce,
+        attempts: Number(result.attempts),
+        timeMs: result.timeMs,
+        hashRate: Number(result.nonce) / (result.timeMs / 1000),
+        adaAddress,
+      });
+
+      return result;
     } catch (error: any) {
       throw new Error(
         `Error in solveScavengerHuntChallenge: ${
