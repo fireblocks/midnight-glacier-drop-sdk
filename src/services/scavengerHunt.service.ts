@@ -3,9 +3,9 @@ import { scavengerHuntBaseUrl } from "../constants.js";
 import {
   RegistrationReceipt,
   SolutionResponse,
-  DonationResponse,
   TermsAndConditions,
   ScavangerHuntChallangeResponse,
+  DonateToScavengerHuntResponse,
 } from "../types.js";
 import { Logger } from "../utils/logger.js";
 import { AshMaize } from "../utils/ashmaize.js";
@@ -328,7 +328,7 @@ export class ScavengerHuntService {
     destinationAddress: string;
     originalAddress: string;
     signature: string;
-  }): Promise<DonationResponse> => {
+  }): Promise<DonateToScavengerHuntResponse> => {
     try {
       const { destinationAddress, originalAddress, signature } = params;
 
@@ -337,8 +337,7 @@ export class ScavengerHuntService {
       );
 
       const response = await axios.post(
-        `${scavengerHuntBaseUrl}/donate_to/${destinationAddress}/${originalAddress}/${signature}`,
-        {}
+        `${scavengerHuntBaseUrl}/donate_to/${destinationAddress}/${originalAddress}/${signature}`
       );
 
       if (response.status === 200) {
@@ -347,10 +346,12 @@ export class ScavengerHuntService {
         );
         return response.data;
       } else {
+        this.logger.error("Donate Response Data:", response.data);
         throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
+        this.logger.error("Response:", error.response);
         this.logger.error("Status:", error.response?.status);
         this.logger.error("Response Data:", error.response?.data);
 
