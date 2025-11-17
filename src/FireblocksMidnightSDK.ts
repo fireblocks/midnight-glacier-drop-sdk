@@ -17,6 +17,7 @@ import {
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
   makeClaimsOpts,
+  MidnightApiError,
   NoteType,
   PhaseConfigResponse,
   registerScavengerHuntAddressOpts,
@@ -174,22 +175,10 @@ export class FireblocksMidnightSDK {
   public checkAddressAllocation = async ({
     chain,
   }: checkAddressAllocationOpts): Promise<number> => {
-    try {
-      return await this.provetreeService.checkAddressAllocation(
-        this.address,
-        chain
-      );
-    } catch (error: any) {
-      this.logger.error(
-        `Error in checking allocation for address ${this.address} on chain ${chain}:`,
-        error instanceof Error ? error.message : error
-      );
-      throw new Error(
-        `Error in checking allocation for address ${
-          this.address
-        } on chain ${chain}: ${error instanceof Error ? error.message : error}`
-      );
-    }
+    return await this.provetreeService.checkAddressAllocation(
+      this.address,
+      chain
+    );
   };
 
   /**
@@ -202,23 +191,10 @@ export class FireblocksMidnightSDK {
   public getClaimsHistory = async ({
     chain,
   }: getClaimsHistoryOpts): Promise<ClaimHistoryResponse[]> => {
-    try {
-      return await this.claimApiService.getClaimsHistory(
-        chain as SupportedBlockchains,
-        this.address
-      );
-    } catch (error: any) {
-      this.logger.error(
-        `Error in fetching claims history for address ${this.address} on chain ${chain}:`,
-        error instanceof Error ? error.message : error
-      );
-      throw new Error(
-        `Error in fetching claims history for address ${
-          this.address
-        } on chain ${chain}:
-        ${error instanceof Error ? error.message : error}`
-      );
-    }
+    return await this.claimApiService.getClaimsHistory(
+      chain as SupportedBlockchains,
+      this.address
+    );
   };
 
   /**
@@ -309,14 +285,15 @@ export class FireblocksMidnightSDK {
 
       return claimResponse;
     } catch (error: any) {
-      this.logger.error(
-        `Error in making claims for address ${this.address} on chain ${chain}:`,
-        error instanceof Error ? error.message : error
-      );
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("makeClaims error:", error.message);
       throw new Error(
-        `Error in making claims for address ${
-          this.address
-        } on chain ${chain}: ${error instanceof Error ? error.message : error}`
+        `Error making claims for ${this.address} on ${chain}: ${
+          error instanceof Error ? error.message : error
+        }`
       );
     }
   };
@@ -371,6 +348,11 @@ export class FireblocksMidnightSDK {
         tokenName: this.assetId,
       };
     } catch (error: any) {
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("transferClaims error:", error.message);
       throw new Error(
         `Error in transferClaims: ${
           error instanceof Error ? error.message : JSON.stringify(error)
@@ -636,22 +618,10 @@ export class FireblocksMidnightSDK {
   public getVaultAccountAddresses = async ({
     vaultAccountId,
   }: getVaultAccountAddressesOpts): Promise<VaultWalletAddress[]> => {
-    try {
-      return await this.fireblocksService.getVaultAccountAddresses(
-        vaultAccountId,
-        this.assetId
-      );
-    } catch (error: any) {
-      this.logger.error(
-        `Error in getVaultAccountAddresses for vault account ${vaultAccountId}:`,
-        error instanceof Error ? error.message : error
-      );
-      throw new Error(
-        `Error in getVaultAccountAddresses for vault account ${vaultAccountId}: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-    }
+    return await this.fireblocksService.getVaultAccountAddresses(
+      vaultAccountId,
+      this.assetId
+    );
   };
 
   public registerScavengerHuntAddress = async ({
@@ -712,6 +682,11 @@ export class FireblocksMidnightSDK {
 
       return result;
     } catch (error: any) {
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("registerScavengerHuntAddress error:", error.message);
       throw new Error(
         `Error in registerScavengerHuntAddress: ${
           error instanceof Error ? error.message : error
@@ -754,6 +729,11 @@ export class FireblocksMidnightSDK {
 
       return result;
     } catch (error: any) {
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("solveScavengerHuntChallenge error:", error.message);
       throw new Error(
         `Error in solveScavengerHuntChallenge: ${
           error instanceof Error ? error.message : error
@@ -808,6 +788,11 @@ export class FireblocksMidnightSDK {
 
       return result;
     } catch (error: any) {
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("donateToScavengerHunt error:", error.message);
       throw new Error(
         `Error in donateToScavengerHunt: ${
           error instanceof Error ? error.message : error
@@ -818,79 +803,34 @@ export class FireblocksMidnightSDK {
 
   public getScavengerHuntChallenge =
     async (): Promise<ScavangerHuntChallangeResponse> => {
-      try {
-        const challenge = await this.scavengerHuntService.getChallenge();
-        return challenge;
-      } catch (error: any) {
-        this.logger.error(
-          `getScavengerHuntChallenge: ${
-            error instanceof Error ? error.message : error
-          }`
-        );
-        throw new Error(
-          `Error in getScavengerHuntChallenge:
-        ${error instanceof Error ? error.message : error}`
-        );
-      }
+      return await this.scavengerHuntService.getChallenge();
     };
 
   public getPhaseConfig = async (): Promise<PhaseConfigResponse> => {
-    try {
-      return await this.thawsService.getPhaseConfig();
-    } catch (error: any) {
-      this.logger.error(
-        `getPhaseConfig: ${error instanceof Error ? error.message : error}`
-      );
-      throw new Error(
-        `getPhaseConfig:
-        ${error instanceof Error ? error.message : error}`
-      );
-    }
+    return await this.thawsService.getPhaseConfig();
   };
 
   public getThawSchedule = async (params: {
     vaultAccountId: string;
   }): Promise<ThawScheduleResponse> => {
-    try {
-      const { vaultAccountId } = params;
-      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
-        vaultAccountId,
-        SupportedAssetIds.ADA
-      );
+    const { vaultAccountId } = params;
+    const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+      vaultAccountId,
+      SupportedAssetIds.ADA
+    );
 
-      return await this.thawsService.getThawSchedule(adaAddress);
-    } catch (error: any) {
-      this.logger.error(
-        `getThawSchedule: ${error instanceof Error ? error.message : error}`
-      );
-      throw new Error(
-        `Error in getThawSchedule:
-        ${error instanceof Error ? error.message : error}`
-      );
-    }
+    return await this.thawsService.getThawSchedule(adaAddress);
   };
 
   public getThawTransactionStatus = async (params: {
     destAddress: string;
     transactionId: string;
   }): Promise<ThawTransactionStatus> => {
-    try {
-      const { destAddress, transactionId } = params;
-      return await this.thawsService.getTransactionStatus(
-        destAddress,
-        transactionId
-      );
-    } catch (error: any) {
-      this.logger.error(
-        `getThawTransactionStatus: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-      throw new Error(
-        `Error in getThawTransactionStatus:
-        ${error instanceof Error ? error.message : error}`
-      );
-    }
+    const { destAddress, transactionId } = params;
+    return await this.thawsService.getTransactionStatus(
+      destAddress,
+      transactionId
+    );
   };
 
   public redeemNight = async (params: {
@@ -932,9 +872,11 @@ export class FireblocksMidnightSDK {
 
       return submitResponse;
     } catch (error: any) {
-      this.logger.error(
-        `redeemNight: ${error instanceof Error ? error.message : error}`
-      );
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("redeemNight error:", error.message);
       throw new Error(
         `Error in redeemNight: ${
           error instanceof Error ? error.message : JSON.stringify(error)
@@ -955,15 +897,11 @@ export class FireblocksMidnightSDK {
       }
     } catch (error: any) {
       this.logger.error(
-        `Failed to validate redemption window: ${
+        `Redemption window validation failed: ${
           error instanceof Error ? error.message : error
         }`
       );
-      throw new Error(
-        `Failed to validate redemption window: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
+      throw error;
     }
   };
 
@@ -986,15 +924,11 @@ export class FireblocksMidnightSDK {
       }
     } catch (error: any) {
       this.logger.error(
-        `Failed to validate redeemable thaws: ${
+        `Redeemable thaws validation failed: ${
           error instanceof Error ? error.message : error
         }`
       );
-      throw new Error(
-        `Failed to validate redeemable thaws: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
+      throw error;
     }
   };
 
@@ -1020,11 +954,7 @@ export class FireblocksMidnightSDK {
           error instanceof Error ? error.message : error
         }`
       );
-      throw new Error(
-        `Failed to fetch and convert UTXO: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
+      throw error;
     }
   };
 
