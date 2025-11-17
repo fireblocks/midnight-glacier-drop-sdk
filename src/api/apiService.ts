@@ -30,7 +30,7 @@ import {
   TransactionType,
   TransferClaimsResponse,
   trasnsferClaimsOpts,
-} from "../types.js";
+} from "../types/index.js";
 import { FireblocksMidnightSDK } from "../FireblocksMidnightSDK.js";
 import { Logger } from "../utils/logger.js";
 

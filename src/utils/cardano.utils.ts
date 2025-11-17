@@ -1,7 +1,7 @@
 import { BlockFrostAPI } from "@blockfrost/blockfrost-js";
 import * as lucid from "lucid-cardano";
 import { nightTokenName } from "../constants.js";
-import { Utxo } from "../types.js";
+import { Utxo } from "../types/index.js";
 import { Logger, LogLevel } from "./logger.js";
 
 const logLevel = "INFO";
@@ -423,7 +423,7 @@ export const submitTransaction = async (
  */
 export const buildCoseSign1 = async (
   message: string,
-  fullSig: string,
+  fullSig: string
 ): Promise<string> => {
   try {
     const { MSL } = await import("cardano-web3-js");

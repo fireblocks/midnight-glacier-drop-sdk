@@ -3,7 +3,7 @@ import {
   SdkManagerMetrics,
   SdkPoolItem,
   SupportedBlockchains,
-} from "../types.js";
+} from "../types/index.js";
 import { FireblocksMidnightSDK } from "../FireblocksMidnightSDK.js";
 import { ConfigurationOptions } from "@fireblocks/ts-sdk";
 import { Logger } from "../utils/logger.js";

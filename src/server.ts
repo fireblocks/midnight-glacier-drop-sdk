@@ -6,7 +6,7 @@ import { configureRouter } from "./api/router.js";
 import { swaggerSpec, swaggerUi } from "./utils/swagger.js";
 import path from "path";
 import { FbNightApiService } from "./api/apiService.js";
-import { ApiServiceConfig } from "./types.js";
+import { ApiServiceConfig } from "./types/index.js";
 import { BasePath } from "@fireblocks/ts-sdk";
 import { fileURLToPath } from "url";
 import { dirname } from "path";

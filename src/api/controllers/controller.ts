@@ -4,7 +4,7 @@ import {
   SupportedBlockchains,
   TransactionType,
   TransferClaimsResponse,
-} from "../../types.js";
+} from "../../types/index.js";
 import { FbNightApiService } from "../apiService.js";
 import { Logger } from "../../utils/logger.js";
 
@@ -187,13 +187,13 @@ export class ApiController {
 
   public registerScavengerHuntAddress = async (req: Request, res: Response) => {
     const { vaultAccountId } = req.params;
-
+    const index = req.params.index ? Number(req.params.index) : 0;
     try {
       const result = await this.api.executeTransaction({
         vaultAccountId,
         chain: SupportedBlockchains.CARDANO,
         transactionType: TransactionType.REGISTER_SCAVENGER_HUNT_ADDRESS,
-        params: { vaultAccountId },
+        params: { vaultAccountId, index },
       });
 
       res.status(200).json({ result });
@@ -253,13 +253,13 @@ export class ApiController {
 
   public getThawSchedule = async (req: Request, res: Response) => {
     const { vaultAccountId } = req.params;
-
+    const index = req.params.index ? Number(req.params.index) : 0;
     try {
       const result = await this.api.executeTransaction({
         vaultAccountId,
         chain: SupportedBlockchains.CARDANO,
         transactionType: TransactionType.GET_THAW_SCHEDULE,
-        params: { vaultAccountId },
+        params: { vaultAccountId, index },
       });
 
       res.status(200).json({ result });

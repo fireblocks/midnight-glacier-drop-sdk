@@ -1,6 +1,6 @@
 // utils/errorHandler.ts
 import axios from "axios";
-import { MidnightApiError } from "../types.js";
+import { MidnightApiError } from "../types/index.js";
 import { Logger } from "./logger.js";
 
 export class ErrorHandler {

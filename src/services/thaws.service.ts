@@ -1,17 +1,16 @@
-import axios from "axios";
 import { redemptionPhaseBaseUrl } from "../constants.js";
+import axiosInstance from "../utils/httpClient.js";
+import { Logger } from "../utils/logger.js";
 import {
   PhaseConfigResponse,
   ThawScheduleResponse,
+  ThawTransactionResponse,
+  ThawTransactionStatus,
   TransactionBuildRequest,
   TransactionBuildResponse,
   TransactionSubmissionRequest,
-  ThawTransactionResponse,
-  ThawTransactionStatus,
   MidnightApiError,
-} from "../types.js";
-import axiosInstance from "../utils/httpClient.js";
-import { Logger } from "../utils/logger.js";
+} from "../types/index.js";
 import { ErrorHandler } from "../utils/errorHandler.js";
 
 export class ThawsService {

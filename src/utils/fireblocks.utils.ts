@@ -7,7 +7,7 @@ import {
   TransactionStateEnum,
   TransferPeerPathType,
 } from "@fireblocks/ts-sdk";
-import { SupportedAssetIds, SupportedBlockchains } from "../types.js";
+import { SupportedAssetIds, SupportedBlockchains } from "../types/index.js";
 import { convertStringToHex } from "xrpl";
 import { encode } from "ripple-binary-codec";
 import { hashTx } from "xrpl/dist/npm/utils/hashes/index.js";

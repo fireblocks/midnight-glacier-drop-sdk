@@ -7,7 +7,7 @@ import {
   ScavangerHuntChallangeResponse,
   DonateToScavengerHuntResponse,
   MidnightApiError,
-} from "../types.js";
+} from "../types/index.js";
 import { Logger } from "../utils/logger.js";
 import { AshMaize } from "../utils/ashmaize.js";
 import { ErrorHandler } from "../utils/errorHandler.js";

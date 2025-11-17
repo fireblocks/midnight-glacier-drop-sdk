@@ -12,7 +12,12 @@ import {
   getTxStatus,
 } from "../utils/fireblocks.utils.js";
 import { termsAndConditionsHash } from "../constants.js";
-import { NoteType, SignMessageParams, SupportedAssetIds } from "../types.js";
+import {
+  NoteType,
+  SignMessageParams,
+  SupportedAssetIds,
+} from "../types/index.js";
+
 import { getAssetIdsByBlockchain } from "../utils/general.js";
 import { Logger } from "../utils/logger.js";
 
@@ -178,7 +183,7 @@ export class FireblocksService {
   public getVaultAccountAddress = async (
     vaultAccountId: string,
     assetId: SupportedAssetIds
-  ): Promise<string> => {
+  ): Promise<VaultWalletAddress[]> => {
     try {
       const addressesResponse =
         await this.fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
@@ -193,14 +198,7 @@ export class FireblocksService {
         );
       }
 
-      const defaultAddress = addresses[0].address;
-      if (!defaultAddress) {
-        throw new Error(
-          `Invalid address found for vault account ${vaultAccountId} and asset ${assetId}`
-        );
-      }
-
-      return defaultAddress;
+      return addresses;
     } catch (error: any) {
       throw new Error(
         `Failed to get address for vault account ${vaultAccountId}: ${error.message}`

@@ -1,5 +1,5 @@
 import { midnightProvtreeAddress } from "../constants.js";
-import { SupportedBlockchains } from "../types.js";
+import { SupportedBlockchains } from "../types/index.js";
 import axiosInstance from "../utils/httpClient.js";
 import { Logger } from "../utils/logger.js";
 
