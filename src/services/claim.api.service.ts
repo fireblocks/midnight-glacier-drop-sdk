@@ -6,11 +6,15 @@ import {
   SupportedBlockchains,
 } from "../types.js";
 import axiosInstance from "../utils/httpClient.js";
+import { Logger } from "../utils/logger.js";
+import { buildCoseSign1 } from "../utils/cardano.utils.js";
 
 /**
  * Service for interacting with the Midnight claim API, providing methods for querying and creating claims across supported blockchains.
  */
 export class ClaimApiService {
+  private readonly logger = new Logger("services:claim-api-service");
+
   /**
    * Fetches the full claims history for a particular address on a specified blockchain.
    *
@@ -36,19 +40,18 @@ export class ClaimApiService {
       }
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
-        console.error("Axios error! - getClaimsHistory");
-        console.error("Status:", error.response?.status);
-        console.error("Status Text:", error.response?.statusText);
-        console.error("Response Data:", error.response?.data);
-        console.error("Request URL:", error.config?.url);
+        this.logger.error("Status:", error.response?.status);
+        this.logger.error("Status Text:", error.response?.statusText);
+        this.logger.error("Response Data:", error.response?.data);
+        this.logger.error("Request URL:", error.config?.url);
         throw new Error(
           error.response?.data?.[0]?.error?.message ||
-            "Error fetchin claims data"
+            error.response ||
+            "Error fetching claims data"
         );
-      } else {
-        console.error("Unexpected error:", error);
-        throw new Error(error.message || "Error getting claims history");
       }
+      this.logger.error("Unexpected error:", error);
+      throw new Error(error.message || "Error getting claims history");
     }
   };
 
@@ -76,36 +79,11 @@ export class ClaimApiService {
     publicKey: string
   ): Promise<SubmitClaimResponse[]> => {
     try {
-      let coseSign1Hex: string = "";
       let params: any = {};
 
       switch (chain) {
         case SupportedBlockchains.CARDANO:
-          const { MSL } = await import("cardano-web3-js");
-          const protectedHeaders = MSL.HeaderMap.new();
-          protectedHeaders.set_algorithm_id(
-            MSL.Label.from_algorithm_id(MSL.AlgorithmId.EdDSA)
-          );
-
-          const protectedSerialized =
-            MSL.ProtectedHeaderMap.new(protectedHeaders);
-          const unprotectedHeaders = MSL.HeaderMap.new();
-          const headers = MSL.Headers.new(
-            protectedSerialized,
-            unprotectedHeaders
-          );
-
-          const messageBytes = new Uint8Array(Buffer.from(message, "utf8"));
-
-          const builder = MSL.COSESign1Builder.new(
-            headers,
-            messageBytes,
-            false
-          );
-          const hexSig = new Uint8Array(Buffer.from(fullSig, "hex"));
-          const coseSign1 = builder.build(hexSig);
-
-          coseSign1Hex = Buffer.from(coseSign1.to_bytes()).toString("hex");
+          const coseSign1Hex = await buildCoseSign1(message, fullSig);
 
           params = [
             {
@@ -150,7 +128,7 @@ export class ClaimApiService {
           throw new Error(`chain ${chain} is not supported.`);
       }
 
-      console.log("makeClaim params", params);
+      this.logger.info("makeClaim params", params);
 
       const response = await axios.post(
         `${midnightClaimAddress}/claims/${chain}`,
@@ -165,7 +143,7 @@ export class ClaimApiService {
         }
       );
 
-      console.log("midnight makeClame success");
+      this.logger.info("NIGHT claimed success.");
 
       if (response.status === 200) {
         return response.data;
@@ -174,18 +152,18 @@ export class ClaimApiService {
       }
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
-        console.error("Axios error! - makeClaims");
-        console.error("Status:", error.response?.status);
-        console.error("Status Text:", error.response?.statusText);
-        console.error("Response Data:", error.response?.data);
-        console.error("Request URL:", error.config?.url);
+        this.logger.error("Axios error! - makeClaims");
+        this.logger.error("Status:", error.response?.status);
+        this.logger.error("Status Text:", error.response?.statusText);
+        this.logger.error("Response Data:", error.response?.data);
+        this.logger.error("Request URL:", error.config?.url);
         throw new Error(
           error.response?.data?.[0]?.error?.message ||
             error.response?.data?.message ||
             "Error making claims"
         );
       } else {
-        console.error("Unexpected error:", error);
+        this.logger.error("Unexpected error:", error);
         throw new Error(error.message || "Error making claims");
       }
     }

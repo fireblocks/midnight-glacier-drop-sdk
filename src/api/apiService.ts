@@ -8,20 +8,29 @@ import {
   ApiServiceConfig,
   checkAddressAllocationOpts,
   ClaimHistoryResponse,
+  donateToScavengerHuntOpts,
+  DonateToScavengerHuntResponse,
   ExecuteTransactionOpts,
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
   makeClaimsOpts,
+  registerScavengerHuntAddressOpts,
+  RegistrationReceipt,
+  ScavangerHuntChallangeResponse,
   SdkManagerMetrics,
+  solveScavengerHuntChallengeOpts,
   SubmitClaimResponse,
   TransactionType,
   TransferClaimsResponse,
   trasnsferClaimsOpts,
 } from "../types.js";
 import { FireblocksMidnightSDK } from "../FireblocksMidnightSDK.js";
+import { Logger } from "../utils/logger.js";
 
 export class FbNightApiService {
   private sdkManager: SdkManager;
+
+  private readonly logger = new Logger("api:api-service");
 
   constructor(config: ApiServiceConfig) {
     if (!config || typeof config !== "object") {
@@ -81,6 +90,9 @@ export class FbNightApiService {
     | ClaimHistoryResponse[]
     | SubmitClaimResponse[]
     | VaultWalletAddress[]
+    | RegistrationReceipt
+    | ScavangerHuntChallangeResponse
+    | DonateToScavengerHuntResponse
   > => {
     let sdk: FireblocksMidnightSDK | undefined;
     try {
@@ -94,7 +106,9 @@ export class FbNightApiService {
         | TransferClaimsResponse
         | ClaimHistoryResponse[]
         | SubmitClaimResponse[]
-        | VaultWalletAddress[];
+        | VaultWalletAddress[]
+        | RegistrationReceipt
+        | ScavangerHuntChallangeResponse;
       switch (transactionType) {
         case TransactionType.CHECK_ADDRESS_ALLOCATION:
           result = await sdk.checkAddressAllocation(
@@ -120,8 +134,29 @@ export class FbNightApiService {
           );
           break;
 
+        case TransactionType.REGISTER_SCAVENGER_HUNT_ADDRESS:
+          result = await sdk.registerScavengerHuntAddress(
+            params as registerScavengerHuntAddressOpts
+          );
+
+        case TransactionType.GET_SCAVENGER_HUNT_CHALLENGE:
+          result = await sdk.getScavengerHuntChallenge();
+          break;
+
+        case TransactionType.SOLVE_SCAVENGER_HUNT_CHALLENGE:
+          result = await sdk.solveScavengerHuntChallenge(
+            params as solveScavengerHuntChallengeOpts
+          );
+          break;
+
+        case TransactionType.DONATE_TO_SCAVENGER_HUNT:
+          result = await sdk.donateToScavengerHunt(
+            params as donateToScavengerHuntOpts
+          );
+          break;
+
         default:
-          console.error(
+          this.logger.error(
             `Unknown transaction type: ${transactionType} for vault ${vaultAccountId}`
           );
           throw new Error(`Unknown transaction type: ${transactionType}`);
@@ -129,7 +164,7 @@ export class FbNightApiService {
 
       return result;
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error executing ${transactionType} for vault ${vaultAccountId}:`,
         error
       );

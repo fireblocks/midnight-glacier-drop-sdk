@@ -11,6 +11,14 @@ import { SupportedAssetIds, SupportedBlockchains } from "../types.js";
 import { convertStringToHex } from "xrpl";
 import { encode } from "ripple-binary-codec";
 import { hashTx } from "xrpl/dist/npm/utils/hashes/index.js";
+import { getAssetIdsByBlockchain } from "../index.js";
+import { Logger, LogLevel } from "./logger.js";
+
+const logLevel = "INFO";
+Logger.setLogLevel(
+  LogLevel[logLevel as keyof typeof LogLevel] || LogLevel.INFO
+);
+const logger = new Logger("utils:fireblocks");
 
 /**
  * Generates a transaction payload for signing messages on various blockchains.
@@ -28,12 +36,16 @@ import { hashTx } from "xrpl/dist/npm/utils/hashes/index.js";
 export const generateTransactionPayload = async (
   payload: string,
   chain: SupportedBlockchains,
-  assetId: SupportedAssetIds,
   originVaultAccountId: string,
   fireblocks: Fireblocks,
-  note?: string
+  note?: string,
+  noteType?: "claim" | "donate" | "register"
 ): Promise<TransactionRequest> => {
   try {
+    const assetId = getAssetIdsByBlockchain(chain);
+    if (!assetId) {
+      throw new Error("Unsupported blockchain for asset ID retrieval.");
+    }
     switch (chain) {
       case SupportedBlockchains.CARDANO:
         const { MSL } = await import("cardano-web3-js");
@@ -53,6 +65,8 @@ export const generateTransactionPayload = async (
         const builder = MSL.COSESign1Builder.new(headers, payloadBytes, false);
         const sigStructureBytes = builder.make_data_to_sign().to_bytes();
         const content = Buffer.from(sigStructureBytes).toString("hex");
+        const bip44change = noteType === "donate" || "register" ? 0 : 2;
+
         return {
           source: {
             type: TransferPeerPathType.VaultAccount,
@@ -66,7 +80,7 @@ export const generateTransactionPayload = async (
               messages: [
                 {
                   content,
-                  bip44change: 2,
+                  bip44change,
                 },
               ],
             },
@@ -234,7 +248,7 @@ export const getTxStatus = async (
     let txResponse: FireblocksResponse<TransactionResponse> =
       await fireblocks.transactions.getTransaction({ txId });
     let lastStatus = txResponse.data.status;
-    console.log(
+    logger.info(
       `Transaction ${txResponse.data.id} is currently at status - ${txResponse.data.status}`
     );
 
@@ -248,7 +262,7 @@ export const getTxStatus = async (
       });
 
       if (txResponse.data.status !== lastStatus) {
-        console.log(
+        logger.info(
           `Transaction ${txResponse.data.id} is currently at status - ${txResponse.data.status}`
         );
         lastStatus = txResponse.data.status;

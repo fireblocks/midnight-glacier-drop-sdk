@@ -6,12 +6,15 @@ import {
 } from "../types.js";
 import { FireblocksMidnightSDK } from "../FireblocksMidnightSDK.js";
 import { ConfigurationOptions } from "@fireblocks/ts-sdk";
+import { Logger } from "../utils/logger.js";
 
 export class SdkManager {
   private sdkPool: Map<string, SdkPoolItem> = new Map();
   private baseConfig: ConfigurationOptions;
   private poolConfig: PoolConfig;
   private cleanupInterval: NodeJS.Timeout;
+
+  private readonly logger = new Logger("pool:sdk-manager");
 
   constructor(
     baseConfig: ConfigurationOptions,
@@ -48,7 +51,7 @@ export class SdkManager {
 
     // If instance exists and is not in use, return it
     if (poolItem && !poolItem.isInUse) {
-      console.log(
+      this.logger.info(
         `Reusing existing SDK instance for vault ${vaultAccountId} on chain ${chain}`
       );
       poolItem.lastUsed = new Date();
@@ -59,7 +62,7 @@ export class SdkManager {
     if (this.sdkPool.size >= this.poolConfig.maxPoolSize && !poolItem) {
       const removed = await this.removeOldestIdleSdk();
       if (!removed) {
-        console.error(
+        this.logger.error(
           `SDK pool is at maximum capacity (${this.poolConfig.maxPoolSize}) with no idle connections`
         );
         throw new Error(
@@ -113,7 +116,7 @@ export class SdkManager {
         chain,
       });
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Failed to create SDK instance for vault ${vaultAccountId} on chain ${chain}:`,
         error
       );
@@ -165,9 +168,9 @@ export class SdkManager {
     for (const key of keysToRemove) {
       try {
         this.sdkPool.delete(key);
-        console.log(`Removed idle SDK instance for vault ${key}`);
+        this.logger.info(`Removed idle SDK instance for vault ${key}`);
       } catch (error) {
-        console.error(`Error shutting down SDK for vault ${key}:`, error);
+        this.logger.error(`Error shutting down SDK for vault ${key}:`, error);
       }
     }
   };
@@ -202,6 +205,6 @@ export class SdkManager {
     clearInterval(this.cleanupInterval);
 
     this.sdkPool.clear();
-    console.log("All SDK instances have been shut down");
+    this.logger.info("All SDK instances have been shut down");
   };
 }

@@ -2,6 +2,13 @@ import { BlockFrostAPI } from "@blockfrost/blockfrost-js";
 import * as lucid from "lucid-cardano";
 import { nightTokenName } from "../constants.js";
 import { Utxo } from "../types.js";
+import { Logger, LogLevel } from "./logger.js";
+
+const logLevel = "INFO";
+Logger.setLogLevel(
+  LogLevel[logLevel as keyof typeof LogLevel] || LogLevel.INFO
+);
+const logger = new Logger("utils:cardano");
 
 /**
  * Fetches UTXOs for a given Cardano address using Blockfrost, and selects enough UTXOs to satisfy
@@ -363,11 +370,11 @@ export const calculateTtl = async (
     // Convert slot to unix timestamp (in ms)
     const ttlUnixMs = lucid.utils.slotToUnixTime(ttlSlot);
 
-    console.log(`Calculated TTL (ms): ${ttlUnixMs} (slot: ${ttlSlot})`);
+    logger.info(`Calculated TTL (ms): ${ttlUnixMs} (slot: ${ttlSlot})`);
 
     return ttlUnixMs;
   } catch (error) {
-    console.error(`Failed to calculate TTL: ${error}`);
+    logger.error(`Failed to calculate TTL: ${error}`);
     throw new Error(
       `Unable to calculate TTL. ${
         error instanceof Error ? error.message : error
@@ -393,7 +400,7 @@ export const submitTransaction = async (
 
     const txHash = await blockfrostApi.txSubmit(txCbor);
 
-    console.log(
+    logger.info(
       `Transaction successfully submitted. Transaction ID: ${txHash}`
     );
 
@@ -401,6 +408,52 @@ export const submitTransaction = async (
   } catch (error: any) {
     throw new Error(
       `Error in submitTransaction: ${
+        error instanceof Error ? error.message : error
+      }`
+    );
+  }
+};
+
+/**
+ * Builds a CIP-30 compliant COSE_Sign1 structure from a Fireblocks signature
+ * @param message - The original message that was signed (UTF-8 string)
+ * @param fullSig - The full signature from Fireblocks (hex string)
+ * @param publicKey - The public key from Fireblocks (hex string)
+ * @returns Object containing the COSE_Sign1 hex and public key
+ */
+export const buildCoseSign1 = async (
+  message: string,
+  fullSig: string,
+): Promise<string> => {
+  try {
+    const { MSL } = await import("cardano-web3-js");
+
+    // Create protected headers with EdDSA algorithm
+    const protectedHeaders = MSL.HeaderMap.new();
+    protectedHeaders.set_algorithm_id(
+      MSL.Label.from_algorithm_id(MSL.AlgorithmId.EdDSA)
+    );
+
+    // Build headers structure
+    const protectedSerialized = MSL.ProtectedHeaderMap.new(protectedHeaders);
+    const unprotectedHeaders = MSL.HeaderMap.new();
+    const headers = MSL.Headers.new(protectedSerialized, unprotectedHeaders);
+
+    // Convert message to bytes
+    const messageBytes = new Uint8Array(Buffer.from(message, "utf8"));
+
+    // Build COSE_Sign1 structure
+    const builder = MSL.COSESign1Builder.new(headers, messageBytes, false);
+    const signatureBytes = new Uint8Array(Buffer.from(fullSig, "hex"));
+    const coseSign1 = builder.build(signatureBytes);
+
+    // Convert to hex
+    const coseSign1Hex = Buffer.from(coseSign1.to_bytes()).toString("hex");
+
+    return coseSign1Hex;
+  } catch (error) {
+    throw new Error(
+      `Failed to build COSE_Sign1: ${
         error instanceof Error ? error.message : error
       }`
     );

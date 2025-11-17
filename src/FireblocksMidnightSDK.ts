@@ -12,9 +12,15 @@ import { ProvetreeService } from "./services/provetree.service.js";
 import {
   checkAddressAllocationOpts,
   ClaimHistoryResponse,
+  donateToScavengerHuntOpts,
+  DonateToScavengerHuntResponse,
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
   makeClaimsOpts,
+  registerScavengerHuntAddressOpts,
+  RegistrationReceipt,
+  ScavangerHuntChallangeResponse,
+  solveScavengerHuntChallengeOpts,
   SubmitClaimResponse,
   SupportedAssetIds,
   SupportedBlockchains,
@@ -23,24 +29,33 @@ import {
 } from "./types.js";
 import { nightTokenName, tokenTransactionFee } from "./constants.js";
 import { getAssetIdsByBlockchain } from "./utils/general.js";
-import { calculateTtl, fetchAndSelectUtxos } from "./utils/cardano.utils.js";
+import {
+  buildCoseSign1,
+  calculateTtl,
+  fetchAndSelectUtxos,
+} from "./utils/cardano.utils.js";
 
 import { config } from "./utils/config.js";
+import { ScavengerHuntService } from "./services/scavengerHunt.service.js";
+import { Logger } from "./utils/logger.js";
 
 export class FireblocksMidnightSDK {
   private fireblocksService: FireblocksService;
   private claimApiService: ClaimApiService;
   private provetreeService: ProvetreeService;
+  private scavengerHuntService: ScavengerHuntService;
   private assetId: SupportedAssetIds;
   private vaultAccountId: string;
   private address: string;
   private blockfrostProjectId?: string;
   private lucid?: lucid.Lucid;
+  private readonly logger = new Logger("app:fireblocks-midnight-sdk");
 
   constructor(params: {
     fireblocksService: FireblocksService;
     claimApiService: ClaimApiService;
     provetreeService: ProvetreeService;
+    scavengerHuntService: ScavengerHuntService;
     assetId: SupportedAssetIds;
     vaultAccountId: string;
     address: string;
@@ -49,6 +64,7 @@ export class FireblocksMidnightSDK {
     this.fireblocksService = params.fireblocksService;
     this.claimApiService = params.claimApiService;
     this.provetreeService = params.provetreeService;
+    this.scavengerHuntService = params.scavengerHuntService;
     this.assetId = params.assetId;
     this.vaultAccountId = params.vaultAccountId;
     this.address = params.address;
@@ -74,6 +90,8 @@ export class FireblocksMidnightSDK {
     chain: SupportedBlockchains;
   }): Promise<FireblocksMidnightSDK> => {
     try {
+      const logger = new Logger(`app:${params.chain}:fireblocks-midnight-sdk`);
+
       const { fireblocksConfig, vaultAccountId, chain } = params;
       const assetId = getAssetIdsByBlockchain(chain);
       if (!assetId) {
@@ -88,18 +106,20 @@ export class FireblocksMidnightSDK {
 
       const blockfrostProjectId = config.BLOCKFROST_PROJECT_ID;
       if (!blockfrostProjectId) {
-        console.warn(
-          "[warn] BLOCKFROST_PROJECT_ID is not configured. Some features may not work."
+        logger.warn(
+          "BLOCKFROST_PROJECT_ID is not configured. Some features may not work."
         );
       }
 
       const claimApiService = new ClaimApiService();
       const provetreeService = new ProvetreeService();
+      const scavengerHuntService = new ScavengerHuntService();
 
       const sdkInstance = new FireblocksMidnightSDK({
         fireblocksService,
         claimApiService,
         provetreeService,
+        scavengerHuntService,
         assetId,
         vaultAccountId,
         address,
@@ -198,15 +218,15 @@ export class FireblocksMidnightSDK {
           chain as SupportedBlockchains
         );
 
-      const fbResoponse = await this.fireblocksService.signMessage(
-        chain as SupportedBlockchains,
-        this.assetId,
-        this.vaultAccountId,
+      const fbResoponse = await this.fireblocksService.signMessage({
+        chain: chain as SupportedBlockchains,
+        originVaultAccountId: this.vaultAccountId,
         destinationAddress,
-        allocationValue,
-        this.vaultAccountId,
-        originAddress
-      );
+        amount: allocationValue,
+        vaultName: this.vaultAccountId,
+        originAddress,
+        noteType: "claim",
+      });
 
       if (
         !fbResoponse ||
@@ -253,6 +273,13 @@ export class FireblocksMidnightSDK {
         destinationAddress,
         publicKey
       );
+
+      this.logger.appendData("claims-history", {
+        address: claimResponse[0].address,
+        amount: claimResponse[0].amount,
+        claim_id: claimResponse[0].claim_id,
+        dest_address: claimResponse[0].dest_address,
+      });
 
       return claimResponse;
     } catch (error: any) {
@@ -302,7 +329,10 @@ export class FireblocksMidnightSDK {
           ? "Preprod"
           : "Preview";
         this.lucid = await lucid.Lucid.new(
-          new lucid.Blockfrost(this.blockfrostProjectId, this.blockfrostProjectId),
+          new lucid.Blockfrost(
+            this.blockfrostProjectId,
+            this.blockfrostProjectId
+          ),
           network
         );
       }
@@ -499,4 +529,179 @@ export class FireblocksMidnightSDK {
       );
     }
   };
+
+  public registerScavengerHuntAddress = async ({
+    vaultAccountId,
+  }: registerScavengerHuntAddressOpts): Promise<RegistrationReceipt> => {
+    try {
+      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+        vaultAccountId,
+        SupportedAssetIds.ADA
+      );
+
+      const termsResponse = await fetch(
+        "https://scavenger.prod.gd.midnighttge.io/TandC"
+      );
+      const terms = await termsResponse.json();
+      const messageToSign = terms.message;
+      const signedMessageResponse = await this.fireblocksService.signMessage({
+        chain: SupportedBlockchains.CARDANO,
+        originVaultAccountId: vaultAccountId,
+        destinationAddress: adaAddress,
+        amount: 0,
+        message: messageToSign,
+        noteType: "register",
+      });
+
+      if (
+        !signedMessageResponse ||
+        !signedMessageResponse.content ||
+        !signedMessageResponse.publicKey ||
+        !signedMessageResponse.signature ||
+        !signedMessageResponse.signature.fullSig
+      ) {
+        throw new Error(
+          "Invalid Fireblocks response: missing signature or public key"
+        );
+      }
+
+      const fullSig = signedMessageResponse.signature.fullSig;
+      const publicKey = signedMessageResponse.publicKey;
+
+      const coseSign1Hex = await buildCoseSign1(messageToSign, fullSig!);
+
+      const result = await this.scavengerHuntService.register({
+        destinationAddress: adaAddress,
+        signature: coseSign1Hex,
+        pubkey: publicKey,
+      });
+
+      this.logger.saveData("registered-addresses", {
+        vaultAccountId: vaultAccountId,
+        address: adaAddress,
+        publicKey: publicKey,
+        timestamp: result.timestamp,
+        registrationReceipt: result.registrationReceipt,
+        preimage: result.preimage,
+        signature: result.signature,
+      });
+
+      return result;
+    } catch (error: any) {
+      throw new Error(
+        `Error in registerScavengerHuntAddress: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
+  };
+
+  public solveScavengerHuntChallenge = async ({
+    vaultAccountId,
+  }: solveScavengerHuntChallengeOpts): Promise<{
+    nonce: string;
+    hash: string;
+    attempts: bigint;
+    timeMs: number;
+  }> => {
+    try {
+      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+        vaultAccountId,
+        SupportedAssetIds.ADA
+      );
+
+      const challengeResonse = await this.scavengerHuntService.getChallenge();
+
+      const challenge = challengeResonse.challenge;
+
+      const result = await this.scavengerHuntService.solveChallenge({
+        address: adaAddress,
+        challenge,
+      });
+
+      this.logger.appendData("mining-history", {
+        challengeId: challenge.challenge_id,
+        nonce: result.nonce,
+        attempts: Number(result.attempts),
+        timeMs: result.timeMs,
+        hashRate: Number(result.nonce) / (result.timeMs / 1000),
+        adaAddress,
+      });
+
+      return result;
+    } catch (error: any) {
+      throw new Error(
+        `Error in solveScavengerHuntChallenge: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
+  };
+
+  public donateToScavengerHunt = async ({
+    vaultAccountId,
+    destAddress,
+  }: donateToScavengerHuntOpts): Promise<DonateToScavengerHuntResponse> => {
+    try {
+      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+        vaultAccountId,
+        SupportedAssetIds.ADA
+      );
+
+      const messageToSign = `Assign accumulated Scavenger rights to: ${destAddress}`;
+
+      const signedMessageResponse = await this.fireblocksService.signMessage({
+        chain: SupportedBlockchains.CARDANO,
+        originVaultAccountId: vaultAccountId,
+        destinationAddress: adaAddress,
+        amount: 0,
+        message: messageToSign,
+        noteType: "donate",
+      });
+
+      if (
+        !signedMessageResponse ||
+        !signedMessageResponse.content ||
+        !signedMessageResponse.signature ||
+        !signedMessageResponse.signature.fullSig
+      ) {
+        throw new Error(
+          "Invalid Fireblocks response: missing signature or public key"
+        );
+      }
+
+      const fullSig = signedMessageResponse.signature.fullSig;
+
+      const signature = await buildCoseSign1(messageToSign, fullSig!);
+
+      const result = await this.scavengerHuntService.donateToAddress({
+        destinationAddress: destAddress,
+        originalAddress: adaAddress,
+        signature,
+      });
+
+      this.logger.appendData("donation-history", result);
+
+      return result;
+    } catch (error: any) {
+      throw new Error(
+        `Error in donateToScavengerHunt: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
+  };
+
+  public getScavengerHuntChallenge =
+    async (): Promise<ScavangerHuntChallangeResponse> => {
+      try {
+        const challenge = await this.scavengerHuntService.getChallenge();
+        return challenge;
+      } catch (error: any) {
+        throw new Error(
+          `Error in getScavengerHuntChallenge:
+        ${error instanceof Error ? error.message : error}`
+        );
+      }
+    };
 }

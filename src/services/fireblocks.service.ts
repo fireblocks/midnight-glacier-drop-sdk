@@ -12,13 +12,16 @@ import {
   getTxStatus,
 } from "../utils/fireblocks.utils.js";
 import { termsAndConditionsHash } from "../constants.js";
-import { SupportedAssetIds, SupportedBlockchains } from "../types.js";
+import { SignMessageParams, SupportedAssetIds } from "../types.js";
+import { getAssetIdsByBlockchain } from "../utils/general.js";
+import { Logger } from "../utils/logger.js";
 
 /**
  * Service class for interacting with the Fireblocks SDK.
  */
 export class FireblocksService {
   private readonly fireblocksSDK: Fireblocks;
+  private readonly logger = new Logger("services:fireblocks");
 
   constructor(config: FireblocksConfig) {
     this.fireblocksSDK = new Fireblocks({
@@ -62,11 +65,11 @@ export class FireblocksService {
           algorithm: signatureData.algorithm,
         };
       } else {
-        console.warn("No signed message found in response.");
+        this.logger.warn("No signed message found in response.");
         return null;
       }
     } catch (error: any) {
-      console.error(
+      this.logger.error(
         `${transactionPayload.assetId} signing error:`,
         error.message
       );
@@ -85,13 +88,7 @@ export class FireblocksService {
    * @returns {Promise<{ signature?: SignedMessageSignature; publicKey?: string; algorithm?: SignedMessageAlgorithmEnum; content?: string; message: string } | null>} The signed message or null if signing fails.
    */
   public signMessage = async (
-    chain: SupportedBlockchains,
-    assetId: SupportedAssetIds,
-    originVaultAccountId: string,
-    destinationAddress: string,
-    amount: number,
-    vaultName?: string,
-    originAddress?: string
+    params: SignMessageParams
   ): Promise<{
     signature?: SignedMessageSignature;
     publicKey?: string;
@@ -100,27 +97,60 @@ export class FireblocksService {
     message: string;
   } | null> => {
     try {
-      const payload = `STAR ${amount} to ${destinationAddress} ${termsAndConditionsHash}`;
+      const {
+        chain,
+        originVaultAccountId,
+        destinationAddress,
+        amount,
+        vaultName,
+        originAddress,
+        message,
+        noteType,
+      } = params;
+      const payload =
+        message ??
+        `STAR ${amount} to ${destinationAddress} ${termsAndConditionsHash}`;
 
-      console.log("signMessage payload", payload);
+      this.logger.info("signMessage payload", payload);
 
-      // Format the amount for display (convert from smallest unit)
-      const displayAmount = (amount / Math.pow(10, 6)).toFixed(6);
-      const note =
-        vaultName && originAddress
-          ? `Claiming ${displayAmount} NIGHT for ${assetId} from ${originAddress} in Vault ${vaultName} to address ${destinationAddress}`
-          : `Claiming ${displayAmount} NIGHT for ${assetId} to address ${destinationAddress}`;
+      let note: string;
+
+      switch (noteType) {
+        case "donate":
+          note = `Scavenger Hunt Donation for address ${destinationAddress}`;
+          break;
+
+        case "register":
+          note = `Scavenger Hunt Registration for address ${destinationAddress}`;
+          break;
+
+        default: {
+          const assetId = getAssetIdsByBlockchain(chain);
+          const displayAmount = (amount / Math.pow(10, 6)).toFixed(6);
+
+          if (vaultName && originAddress) {
+            note = `Claiming ${displayAmount} NIGHT for ${
+              assetId || chain
+            } from ${originAddress} in Vault ${vaultName} to address ${destinationAddress}`;
+          } else {
+            note = `Claiming ${displayAmount} NIGHT for ${
+              assetId || chain
+            } to address ${destinationAddress}`;
+          }
+          break;
+        }
+      }
 
       const transactionPayload = await generateTransactionPayload(
         payload,
         chain,
-        assetId,
         originVaultAccountId,
         this.fireblocksSDK,
-        note
+        note,
+        noteType
       );
 
-      console.log("signMessage transactionPayload", transactionPayload);
+      this.logger.info("signMessage transactionPayload", transactionPayload);
 
       if (!transactionPayload) {
         throw new Error("Failed to generate transaction payload");
@@ -132,7 +162,7 @@ export class FireblocksService {
         message: payload,
       };
     } catch (error: any) {
-      console.error(error.message);
+      this.logger.error(error.message);
       throw error;
     }
   };

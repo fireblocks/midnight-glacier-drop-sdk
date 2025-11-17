@@ -28,6 +28,10 @@ export enum TransactionType {
   MAKE_CLAIMS = "makeClaims",
   TRANSFER_CLAIMS = "transferClaims",
   GET_VAULT_ACCOUNT_ADDRESSES = "getVaultAccountAddresses",
+  REGISTER_SCAVENGER_HUNT_ADDRESS = "registerScavengerHuntAddress",
+  GET_SCAVENGER_HUNT_CHALLENGE = "getScavengerHuntChallenge",
+  SOLVE_SCAVENGER_HUNT_CHALLENGE = "solveScavengerHuntChallenge",
+  DONATE_TO_SCAVENGER_HUNT = "donateToScavengerHunt",
 }
 
 export interface checkAddressAllocationOpts {
@@ -64,7 +68,23 @@ export interface ExecuteTransactionOpts {
     | getClaimsHistoryOpts
     | makeClaimsOpts
     | trasnsferClaimsOpts
-    | getVaultAccountAddressesOpts;
+    | getVaultAccountAddressesOpts
+    | registerScavengerHuntAddressOpts
+    | solveScavengerHuntChallengeOpts
+    | donateToScavengerHuntOpts;
+}
+
+export interface registerScavengerHuntAddressOpts {
+  vaultAccountId: string;
+}
+
+export interface solveScavengerHuntChallengeOpts {
+  vaultAccountId: string;
+}
+
+export interface donateToScavengerHuntOpts {
+  vaultAccountId: string;
+  destAddress: string;
 }
 
 export interface SdkManagerMetrics {
@@ -136,4 +156,89 @@ export interface ClaimHistoryResponse {
   leaf_index: number;
   status: string;
   transaction_id: string | number | null;
+}
+
+export interface SignMessageParams {
+  chain: SupportedBlockchains;
+  originVaultAccountId: string;
+  destinationAddress: string;
+  amount: number;
+  vaultName?: string;
+  originAddress?: string;
+  message?: string;
+  noteType?: "claim" | "donate" | "register";
+}
+
+export interface RegistrationReceipt {
+  preimage: string;
+  signature: string;
+  timestamp: string;
+}
+
+export interface TermsAndConditions {
+  version: string;
+  content: string;
+  message: string;
+}
+
+export interface RegistrationReceipt {
+  registrationReceipt: {
+    preimage: string;
+    signature: string;
+    timestamp: string;
+  };
+}
+
+export interface Challenge {
+  challenge_id: string;
+  challenge_number: number;
+  day: number;
+  issued_at: string;
+  latest_submission: string;
+  difficulty: string;
+  no_pre_mine: string;
+  no_pre_mine_hour: string;
+}
+
+export interface SolutionResponse {
+  crypto_receipt: {
+    preimage: string;
+    timestamp: string;
+    signature: string;
+  };
+}
+export interface WorkToStarRate {
+  rates: number[];
+}
+
+export interface ScavangerHuntChallange {
+  challenge_id: string;
+  difficulty: string;
+  no_pre_mine: string;
+  no_pre_mine_hour: string;
+  latest_submission: Date;
+  challenge_number: number;
+  day: number;
+  issued_at: Date;
+}
+export interface ScavangerHuntChallangeResponse {
+  code: "before" | "active" | "after";
+  challenge: ScavangerHuntChallange;
+  mining_period_ends: Date;
+  max_day: number;
+  total_challenges: number;
+  current_day: number;
+  next_challenge_starts_at: Date;
+}
+
+export interface DonateToScavengerHuntResponse {
+  message: string;
+  status?: string;
+  statusCode?: number;
+  donation_id?: string;
+  original_address?: string;
+  destination_address?: string;
+  timestamp?: string;
+  solutions_consolidated?: number;
+  error?: string;
 }

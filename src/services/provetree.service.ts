@@ -1,13 +1,13 @@
-import axios from "axios";
-
 import { midnightProvtreeAddress } from "../constants.js";
 import { SupportedBlockchains } from "../types.js";
 import axiosInstance from "../utils/httpClient.js";
+import { Logger } from "../utils/logger.js";
 
 /**
  * Service for interacting with the Provetree API, providing methods to check addresses and retrieve proof data.
  */
 export class ProvetreeService {
+  private readonly logger = new Logger("services:provetree");
   /**
    * Fetches the allocation value of a blockchain address via the Provetree API.
    *
@@ -40,7 +40,7 @@ export class ProvetreeService {
         throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error: any) {
-      console.error(
+      this.logger.error(
         `Error fetching data for address ${address}:`,
         error.message
       );
@@ -70,7 +70,7 @@ export class ProvetreeService {
         throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error: any) {
-      console.error("Error fetching proof data:", error.message);
+      this.logger.error("Error fetching proof data:", error.message);
       throw error;
     }
   };
