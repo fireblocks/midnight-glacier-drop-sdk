@@ -145,8 +145,30 @@ export const configureRouter = (api: FbNightApiService): Router => {
    */
   router.post("/claims/:chain", apiController.makeClaims);
 
+  /**
+   * @openapi
+   * /api/scavenger-hunt/register/{vaultAccountId}:
+   *   post:
+   *     summary: Register a Cardano address for scavenger hunt participation
+   *     parameters:
+   *       - in: path
+   *         name: vaultAccountId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: index
+   *         required: false
+   *         schema:
+   *           type: number
+   *           default: 0
+   *         description: Address index to register (default is 0)
+   *     responses:
+   *       200:
+   *         description: Registration successful
+   */
   router.post(
-    "/scavenger-hunt/register/:vaultAccountId/:index?",
+    "/scavenger-hunt/register/:vaultAccountId/",
     apiController.registerScavengerHuntAddress
   );
 
@@ -162,8 +184,30 @@ export const configureRouter = (api: FbNightApiService): Router => {
 
   router.get("/thaws/phase-config", apiController.getPhaseConfig);
 
+  /**
+   * @openapi
+   * /api/thaws/thaw-schedule/{vaultAccountId}:
+   *   get:
+   *     summary: Get thaw schedule for a vault account
+   *     parameters:
+   *       - in: path
+   *         name: vaultAccountId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: index
+   *         required: false
+   *         schema:
+   *           type: number
+   *           default: 0
+   *         description: Thaw index to retrieve (default is 0)
+   *     responses:
+   *       200:
+   *         description: Thaw schedule
+   */
   router.get(
-    "/thaws/thaw-schedule/:vaultAccountId/:index?",
+    "/thaws/thaw-schedule/:vaultAccountId",
     apiController.getThawSchedule
   );
 

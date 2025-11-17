@@ -187,7 +187,8 @@ export class ApiController {
 
   public registerScavengerHuntAddress = async (req: Request, res: Response) => {
     const { vaultAccountId } = req.params;
-    const index = req.params.index ? Number(req.params.index) : 0;
+
+    const index = req.query.index ? Number(req.query.index) : 0;
     try {
       const result = await this.api.executeTransaction({
         vaultAccountId,
@@ -253,7 +254,7 @@ export class ApiController {
 
   public getThawSchedule = async (req: Request, res: Response) => {
     const { vaultAccountId } = req.params;
-    const index = req.params.index ? Number(req.params.index) : 0;
+    const index = req.query.index ? Number(req.query.index) : 0;
     try {
       const result = await this.api.executeTransaction({
         vaultAccountId,
