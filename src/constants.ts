@@ -6,8 +6,6 @@ export const midnightClaimAddress = "https://mainnet.prod.gd.midnighttge.io"; //
 
 export const scavengerHuntBaseUrl = "https://scavenger.prod.gd.midnighttge.io";
 
-export const scavengerHuntNote = "Registering address for NIGHT scavenger hunt";
-
 export const termsAndConditionsHash =
   "31a6bab50a84b8439adcfb786bb2020f6807e6e8fda629b424110fc7bb1c6b8b";
 
