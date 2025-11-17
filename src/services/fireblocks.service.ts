@@ -12,7 +12,7 @@ import {
   getTxStatus,
 } from "../utils/fireblocks.utils.js";
 import { termsAndConditionsHash } from "../constants.js";
-import { SignMessageParams, SupportedAssetIds } from "../types.js";
+import { NoteType, SignMessageParams, SupportedAssetIds } from "../types.js";
 import { getAssetIdsByBlockchain } from "../utils/general.js";
 import { Logger } from "../utils/logger.js";
 
@@ -116,11 +116,11 @@ export class FireblocksService {
       let note: string;
 
       switch (noteType) {
-        case "donate":
+        case NoteType.DONATE:
           note = `Scavenger Hunt Donation for address ${destinationAddress}`;
           break;
 
-        case "register":
+        case NoteType.REGISTER:
           note = `Scavenger Hunt Registration for address ${destinationAddress}`;
           break;
 
