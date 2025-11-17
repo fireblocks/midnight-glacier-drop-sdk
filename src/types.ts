@@ -30,6 +30,7 @@ export enum TransactionType {
   GET_VAULT_ACCOUNT_ADDRESSES = "getVaultAccountAddresses",
   REGISTER_SCAVENGER_HUNT_ADDRESS = "registerScavengerHuntAddress",
   GET_SCAVENGER_HUNT_CHALLENGE = "getScavengerHuntChallenge",
+  SOLVE_SCAVENGER_HUNT_CHALLENGE = "solveScavengerHuntChallenge",
 }
 
 export interface checkAddressAllocationOpts {
@@ -70,6 +71,10 @@ export interface ExecuteTransactionOpts {
 }
 
 export interface registerScavengerHuntAddressOpts {
+  vaultAccountId: string;
+}
+
+export interface solveScavengerHuntChallengeOpts {
   vaultAccountId: string;
 }
 
