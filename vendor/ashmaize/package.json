@@ -1,0 +1,16 @@
+{
+  "name": "ashmaize",
+  "version": "0.1.0",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/input-output-hk/ce-ashmaize"
+  },
+  "files": [
+    "ashmaize_bg.wasm",
+    "ashmaize.js",
+    "ashmaize.d.ts"
+  ],
+  "main": "ashmaize.js",
+  "types": "ashmaize.d.ts"
+}
