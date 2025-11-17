@@ -1,5 +1,5 @@
 export * from "./FireblocksMidnightSDK.js";
-export * from "./types.js";
+export * from "./types/index.js";
 export * from "./utils/general.js";
 export * from "./utils/cardano.utils.js";
 export * from "./utils/fireblocks.utils.js";
