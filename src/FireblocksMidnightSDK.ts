@@ -9,34 +9,6 @@ import * as lucid from "lucid-cardano";
 import { FireblocksService } from "./services/fireblocks.service.js";
 import { ClaimApiService } from "./services/claim.api.service.js";
 import { ProvetreeService } from "./services/provetree.service.js";
-import {
-  checkAddressAllocationOpts,
-  ClaimHistoryResponse,
-  donateToScavengerHuntOpts,
-  DonateToScavengerHuntResponse,
-  getClaimsHistoryOpts,
-  getVaultAccountAddressesOpts,
-  makeClaimsOpts,
-  MidnightApiError,
-  NoteType,
-  PhaseConfigResponse,
-  registerScavengerHuntAddressOpts,
-  RegistrationReceipt,
-  ScavangerHuntChallangeResponse,
-  solveScavengerHuntChallengeOpts,
-  SubmitClaimResponse,
-  SupportedAssetIds,
-  SupportedBlockchains,
-  ThawScheduleResponse,
-  ThawStatusSchedule,
-  ThawTransactionResponse,
-  ThawTransactionStatus,
-  TransactionBuildRequest,
-  TransactionBuildResponse,
-  TransactionSubmissionRequest,
-  TransferClaimsResponse,
-  trasnsferClaimsOpts,
-} from "./types.js";
 import { nightTokenName, tokenTransactionFee } from "./constants.js";
 import { getAssetIdsByBlockchain } from "./utils/general.js";
 import {
@@ -50,6 +22,34 @@ import { ScavengerHuntService } from "./services/scavengerHunt.service.js";
 import { Logger } from "./utils/logger.js";
 import { ThawsService } from "./services/thaws.service.js";
 import { BlockFrostAPI } from "@blockfrost/blockfrost-js";
+import {
+  NoteType,
+  SupportedAssetIds,
+  SupportedBlockchains,
+  ThawStatusSchedule,
+  checkAddressAllocationOpts,
+  ClaimHistoryResponse,
+  getClaimsHistoryOpts,
+  getVaultAccountAddressesOpts,
+  makeClaimsOpts,
+  SubmitClaimResponse,
+  TransferClaimsResponse,
+  trasnsferClaimsOpts,
+  MidnightApiError,
+  donateToScavengerHuntOpts,
+  DonateToScavengerHuntResponse,
+  registerScavengerHuntAddressOpts,
+  RegistrationReceipt,
+  ScavangerHuntChallangeResponse,
+  solveScavengerHuntChallengeOpts,
+  PhaseConfigResponse,
+  ThawScheduleResponse,
+  ThawTransactionResponse,
+  ThawTransactionStatus,
+  TransactionBuildRequest,
+  TransactionBuildResponse,
+  TransactionSubmissionRequest,
+} from "./types/index.js";
 
 export class FireblocksMidnightSDK {
   private fireblocksService: FireblocksService;
@@ -114,10 +114,18 @@ export class FireblocksMidnightSDK {
       }
 
       const fireblocksService = new FireblocksService(fireblocksConfig);
-      const address = await fireblocksService.getVaultAccountAddress(
+      const addresses = await fireblocksService.getVaultAccountAddress(
         vaultAccountId,
         assetId
       );
+
+      const address = addresses[0].address;
+
+      if (!address) {
+        throw new Error(
+          `Invalid address found for vault account ${vaultAccountId} and asset ${assetId}`
+        );
+      }
 
       const blockfrostProjectId = config.BLOCKFROST_PROJECT_ID;
       if (!blockfrostProjectId) {
@@ -626,12 +634,23 @@ export class FireblocksMidnightSDK {
 
   public registerScavengerHuntAddress = async ({
     vaultAccountId,
+    index,
   }: registerScavengerHuntAddressOpts): Promise<RegistrationReceipt> => {
     try {
-      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+      const addresses = await this.fireblocksService.getVaultAccountAddress(
         vaultAccountId,
         SupportedAssetIds.ADA
       );
+
+      const adaAddress = addresses.filter(
+        (addr) => addr.bip44AddressIndex === index
+      )[0]?.address;
+
+      if (!adaAddress) {
+        throw new Error(
+          `Invalid ADA address found for vault account ${vaultAccountId}`
+        );
+      }
 
       const termsResponse = await fetch(
         "https://scavenger.prod.gd.midnighttge.io/TandC"
@@ -675,7 +694,6 @@ export class FireblocksMidnightSDK {
         address: adaAddress,
         publicKey: publicKey,
         timestamp: result.timestamp,
-        registrationReceipt: result.registrationReceipt,
         preimage: result.preimage,
         signature: result.signature,
       });
@@ -704,10 +722,18 @@ export class FireblocksMidnightSDK {
     timeMs: number;
   }> => {
     try {
-      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+      const addresses = await this.fireblocksService.getVaultAccountAddress(
         vaultAccountId,
         SupportedAssetIds.ADA
       );
+
+      const adaAddress = addresses[0].address;
+
+      if (!adaAddress) {
+        throw new Error(
+          `Invalid ADA address found for vault account ${vaultAccountId}`
+        );
+      }
 
       const challengeResonse = await this.scavengerHuntService.getChallenge();
 
@@ -747,11 +773,18 @@ export class FireblocksMidnightSDK {
     destAddress,
   }: donateToScavengerHuntOpts): Promise<DonateToScavengerHuntResponse> => {
     try {
-      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+      const addresses = await this.fireblocksService.getVaultAccountAddress(
         vaultAccountId,
         SupportedAssetIds.ADA
       );
 
+      const adaAddress = addresses[0].address;
+
+      if (!adaAddress) {
+        throw new Error(
+          `Invalid ADA address found for vault account ${vaultAccountId}`
+        );
+      }
       const messageToSign = `Assign accumulated Scavenger rights to: ${destAddress}`;
 
       const signedMessageResponse = await this.fireblocksService.signMessage({
@@ -812,12 +845,29 @@ export class FireblocksMidnightSDK {
 
   public getThawSchedule = async (params: {
     vaultAccountId: string;
+    index: number;
   }): Promise<ThawScheduleResponse> => {
-    const { vaultAccountId } = params;
-    const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+    const { vaultAccountId, index } = params;
+    const addresses = await this.fireblocksService.getVaultAccountAddress(
       vaultAccountId,
       SupportedAssetIds.ADA
     );
+
+    if (addresses.length === 0) {
+      throw new Error(
+        `No ADA addresses found for vault account ${vaultAccountId}`
+      );
+    }
+
+    const adaAddress = addresses.filter(
+      (addr) => addr.bip44AddressIndex === index
+    )[0]?.address;
+
+    if (!adaAddress) {
+      throw new Error(
+        `Invalid ADA address found for vault account ${vaultAccountId}`
+      );
+    }
 
     return await this.thawsService.getThawSchedule(adaAddress);
   };
@@ -843,10 +893,18 @@ export class FireblocksMidnightSDK {
         throw new Error("Blockfrost project ID is required for redemption");
       }
 
-      const destAddress = await this.fireblocksService.getVaultAccountAddress(
+      const addresses = await this.fireblocksService.getVaultAccountAddress(
         vaultAccountId,
         SupportedAssetIds.ADA
       );
+
+      const destAddress = addresses[0].address;
+
+      if (!destAddress) {
+        throw new Error(
+          `Invalid ADA address found for vault account ${vaultAccountId}`
+        );
+      }
 
       await this.validateRedemptionWindow();
       await this.validateRedeemableThaws(destAddress);
