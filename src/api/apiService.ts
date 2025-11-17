@@ -14,6 +14,7 @@ import {
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
   makeClaimsOpts,
+  MidnightApiError,
   PhaseConfigResponse,
   redeemNightOpts,
   registerScavengerHuntAddressOpts,
@@ -151,6 +152,7 @@ export class FbNightApiService {
           result = await sdk.registerScavengerHuntAddress(
             params as registerScavengerHuntAddressOpts
           );
+          break;
 
         case TransactionType.GET_SCAVENGER_HUNT_CHALLENGE:
           result = await sdk.getScavengerHuntChallenge();
@@ -195,11 +197,12 @@ export class FbNightApiService {
     } catch (error) {
       this.logger.error(
         `Error executing ${transactionType} for vault ${vaultAccountId}:`,
-        error
+        error instanceof MidnightApiError
+          ? `[${error.statusCode}] ${error.message} (${error.errorType})`
+          : error
       );
       throw error;
     } finally {
-      // Always release the SDK back to the pool
       if (sdk) {
         this.sdkManager.releaseSdk(vaultAccountId);
       }
