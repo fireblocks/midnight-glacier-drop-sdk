@@ -16,6 +16,7 @@ import {
   RegistrationReceipt,
   ScavangerHuntChallangeResponse,
   SdkManagerMetrics,
+  solveScavengerHuntChallengeOpts,
   SubmitClaimResponse,
   TransactionType,
   TransferClaimsResponse,
@@ -137,6 +138,12 @@ export class FbNightApiService {
 
         case TransactionType.GET_SCAVENGER_HUNT_CHALLENGE:
           result = await sdk.getScavengerHuntChallenge();
+          break;
+
+        case TransactionType.SOLVE_SCAVENGER_HUNT_CHALLENGE:
+          result = await sdk.solveScavengerHuntChallenge(
+            params as solveScavengerHuntChallengeOpts
+          );
           break;
 
         default:
