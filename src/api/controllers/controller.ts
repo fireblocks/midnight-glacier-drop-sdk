@@ -248,4 +248,72 @@ export class ApiController {
       res.status(500).json({ error });
     }
   };
+
+  public getPhaseConfig = async (_req: Request, res: Response) => {
+    try {
+      const result = await this.api.executeTransaction({
+        vaultAccountId: "0",
+        chain: SupportedBlockchains.CARDANO,
+        transactionType: TransactionType.GET_PHASE_CONFIG,
+        params: {} as any,
+      });
+
+      res.status(200).json({ result: result });
+    } catch (error: any) {
+      this.logger.error("getPhaseConfig:", error.message);
+      res.status(500).json({ error });
+    }
+  };
+
+  public getThawSchedule = async (req: Request, res: Response) => {
+    try {
+      const { vaultAccountId } = req.params;
+      const result = await this.api.executeTransaction({
+        vaultAccountId,
+        chain: SupportedBlockchains.CARDANO,
+        transactionType: TransactionType.GET_THAW_SCHEDULE,
+        params: { vaultAccountId },
+      });
+
+      res.status(200).json({ result: result });
+    } catch (error: any) {
+      this.logger.error("getThawSchedule:", error.message);
+      res.status(500).json({ error });
+    }
+  };
+
+  public getThawStatus = async (req: Request, res: Response) => {
+    const { destAddress, transactionId } = req.params;
+    try {
+      const result = await this.api.executeTransaction({
+        vaultAccountId: "0",
+        chain: SupportedBlockchains.CARDANO,
+        transactionType: TransactionType.GET_THAW_STATUS,
+        params: { destAddress, transactionId },
+      });
+
+      res.status(200).json({ result: result });
+    } catch (error: any) {
+      this.logger.error("getThawStatus:", error.message);
+      res.status(500).json({ error });
+    }
+  };
+
+  public redeemNight = async (req: Request, res: Response) => {
+    const { vaultAccountId } = req.params;
+    const { destAddress } = req.body;
+    try {
+      const result = await this.api.executeTransaction({
+        vaultAccountId,
+        chain: SupportedBlockchains.CARDANO,
+        transactionType: TransactionType.REDEEM_NIGHT,
+        params: { vaultAccountId, destAddress },
+      });
+
+      res.status(200).json({ result: result });
+    } catch (error: any) {
+      this.logger.error("donateToScavengerHunt:", error.message);
+      res.status(500).json({ error });
+    }
+  };
 }

@@ -14,12 +14,18 @@ import {
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
   makeClaimsOpts,
+  PhaseConfigResponse,
+  redeemNightOpts,
   registerScavengerHuntAddressOpts,
   RegistrationReceipt,
   ScavangerHuntChallangeResponse,
   SdkManagerMetrics,
   solveScavengerHuntChallengeOpts,
   SubmitClaimResponse,
+  thawScheduleOpts,
+  ThawScheduleResponse,
+  thawStatusOpts,
+  ThawTransactionResponse,
   TransactionType,
   TransferClaimsResponse,
   trasnsferClaimsOpts,
@@ -90,9 +96,12 @@ export class FbNightApiService {
     | ClaimHistoryResponse[]
     | SubmitClaimResponse[]
     | VaultWalletAddress[]
+    | PhaseConfigResponse
     | RegistrationReceipt
+    | ThawScheduleResponse
     | ScavangerHuntChallangeResponse
     | DonateToScavengerHuntResponse
+    | ThawTransactionResponse
   > => {
     let sdk: FireblocksMidnightSDK | undefined;
     try {
@@ -108,7 +117,11 @@ export class FbNightApiService {
         | SubmitClaimResponse[]
         | VaultWalletAddress[]
         | RegistrationReceipt
-        | ScavangerHuntChallangeResponse;
+        | ScavangerHuntChallangeResponse
+        | PhaseConfigResponse
+        | ThawScheduleResponse
+        | ThawTransactionResponse;
+
       switch (transactionType) {
         case TransactionType.CHECK_ADDRESS_ALLOCATION:
           result = await sdk.checkAddressAllocation(
@@ -153,6 +166,22 @@ export class FbNightApiService {
           result = await sdk.donateToScavengerHunt(
             params as donateToScavengerHuntOpts
           );
+          break;
+
+        case TransactionType.GET_PHASE_CONFIG:
+          result = await sdk.getPhaseConfig();
+          break;
+
+        case TransactionType.GET_THAW_SCHEDULE:
+          result = await sdk.getThawSchedule(params as thawScheduleOpts);
+          break;
+
+        case TransactionType.GET_THAW_STATUS:
+          result = await sdk.getThawTransactionStatus(params as thawStatusOpts);
+          break;
+
+        case TransactionType.REDEEM_NIGHT:
+          result = await sdk.redeemNight(params as redeemNightOpts);
           break;
 
         default:

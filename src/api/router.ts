@@ -160,5 +160,16 @@ export const configureRouter = (api: FbNightApiService): Router => {
     apiController.donateToScavengerHunt
   );
 
+  router.get("/thaws/phase-config", apiController.getPhaseConfig);
+
+  router.get("/thaws/thaw-schedule/:vaultAccountId", apiController.getThawSchedule);
+
+  router.get(
+    "/thaws/status/:destAddress/:transactionId",
+    apiController.getThawStatus
+  );
+
+  router.post("/thaws/redeem/:vaultAccountId", apiController.redeemNight);
+
   return router;
 };
