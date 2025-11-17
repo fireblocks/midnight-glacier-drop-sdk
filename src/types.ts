@@ -32,6 +32,10 @@ export enum TransactionType {
   GET_SCAVENGER_HUNT_CHALLENGE = "getScavengerHuntChallenge",
   SOLVE_SCAVENGER_HUNT_CHALLENGE = "solveScavengerHuntChallenge",
   DONATE_TO_SCAVENGER_HUNT = "donateToScavengerHunt",
+  GET_PHASE_CONFIG = "getPhaseConfig",
+  GET_THAW_SCHEDULE = "getThawSchedule",
+  GET_THAW_STATUS = "getThawStatus",
+  REDEEM_NIGHT = "redeemNight",
 }
 
 export interface checkAddressAllocationOpts {
@@ -71,7 +75,10 @@ export interface ExecuteTransactionOpts {
     | getVaultAccountAddressesOpts
     | registerScavengerHuntAddressOpts
     | solveScavengerHuntChallengeOpts
-    | donateToScavengerHuntOpts;
+    | donateToScavengerHuntOpts
+    | thawScheduleOpts
+    | thawStatusOpts
+    | redeemNightOpts;
 }
 
 export interface registerScavengerHuntAddressOpts {
@@ -81,8 +88,21 @@ export interface registerScavengerHuntAddressOpts {
 export interface solveScavengerHuntChallengeOpts {
   vaultAccountId: string;
 }
+export interface thawScheduleOpts {
+  vaultAccountId: string;
+}
+
+export interface thawStatusOpts {
+  destAddress: string;
+  transactionId: string;
+}
 
 export interface donateToScavengerHuntOpts {
+  vaultAccountId: string;
+  destAddress: string;
+}
+
+export interface redeemNightOpts {
   vaultAccountId: string;
   destAddress: string;
 }
@@ -158,6 +178,12 @@ export interface ClaimHistoryResponse {
   transaction_id: string | number | null;
 }
 
+export enum NoteType {
+  DONATE = "donate",
+  REGISTER = "register",
+  CLAIM = "claim",
+}
+
 export interface SignMessageParams {
   chain: SupportedBlockchains;
   originVaultAccountId: string;
@@ -166,7 +192,7 @@ export interface SignMessageParams {
   vaultName?: string;
   originAddress?: string;
   message?: string;
-  noteType?: "claim" | "donate" | "register";
+  noteType?: NoteType;
 }
 
 export interface RegistrationReceipt {
@@ -241,4 +267,67 @@ export interface DonateToScavengerHuntResponse {
   timestamp?: string;
   solutions_consolidated?: number;
   error?: string;
+}
+
+export interface PhaseConfigResponse {
+  genesis_timestamp: number;
+  jitter_strata_count: number;
+  redemption_increment_period: number;
+  redemption_increments: number;
+  redemption_initial_delay: number;
+}
+export enum ThawStatusSchedule {
+  UPCOMING = "upcoming",
+  QUEUED = "queued",
+  REDEEMABLE = "redeemable",
+  SUBMITTED = "submitted",
+  FAILED = "failed",
+  CONFIRMING = "confirming",
+  CONFIRMED = "confirmed",
+  SKIPPED = "skipped",
+}
+
+type UTCTime = string; // Format: "yyyy-mm-ddThh:MM:ssZ" (e.g., "2016-07-22T00:00:00Z")
+
+type HexEncoded = string; // Hexadecimal encoded bytes (e.g., "48656C6C6F20576F726C64")
+
+export interface Thaw {
+  amount: number;
+  queue_position?: number;
+  status: ThawStatusSchedule;
+  thawing_period_start: UTCTime;
+  transaction_id?: HexEncoded;
+}
+export interface ThawScheduleResponse {
+  number_of_claimed_allocations: number;
+  thaws: Thaw[];
+}
+
+export interface TransactionBuildRequest {
+  change_address: string;
+  collateral_utxos: HexEncoded[];
+  funding_utxos: HexEncoded[];
+}
+
+export interface TransactionBuildResponse {
+  redeemed_amount: number;
+  require_thawing_extra_signature: boolean;
+  transaction: HexEncoded; // Unsigned transaction hex
+  transaction_id: HexEncoded;
+}
+
+export interface TransactionSubmissionRequest {
+  transaction: HexEncoded;
+  transaction_witness_set: HexEncoded;
+}
+
+export interface ThawTransactionResponse {
+  estimated_submission_time: number;
+  transaction_id: HexEncoded;
+}
+
+export interface ThawTransactionStatus {
+  redeemed_amount: number;
+  status: "queued" | "confirmed" | "failed" | "confirming" | "submitted";
+  transaction_id: HexEncoded;
 }
