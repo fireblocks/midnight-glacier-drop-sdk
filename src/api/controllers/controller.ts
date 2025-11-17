@@ -231,4 +231,21 @@ export class ApiController {
       res.status(500).json({ error });
     }
   };
+
+  public donateToScavengerHunt = async (req: Request, res: Response) => {
+    const { vaultAccountId, destAddress } = req.params;
+    try {
+      const result = await this.api.executeTransaction({
+        vaultAccountId,
+        chain: SupportedBlockchains.CARDANO,
+        transactionType: TransactionType.DONATE_TO_SCAVENGER_HUNT,
+        params: { vaultAccountId, destAddress },
+      });
+
+      res.status(200).json({ result: result });
+    } catch (error: any) {
+      this.logger.error("donateToScavengerHunt:", error.message);
+      res.status(500).json({ error });
+    }
+  };
 }

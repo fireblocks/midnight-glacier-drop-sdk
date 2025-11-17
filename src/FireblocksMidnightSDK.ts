@@ -12,6 +12,8 @@ import { ProvetreeService } from "./services/provetree.service.js";
 import {
   checkAddressAllocationOpts,
   ClaimHistoryResponse,
+  donateToScavengerHuntOpts,
+  DonateToScavengerHuntResponse,
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
   makeClaimsOpts,
@@ -223,6 +225,7 @@ export class FireblocksMidnightSDK {
         amount: allocationValue,
         vaultName: this.vaultAccountId,
         originAddress,
+        noteType: "claim",
       });
 
       if (
@@ -547,6 +550,7 @@ export class FireblocksMidnightSDK {
         destinationAddress: adaAddress,
         amount: 0,
         message: messageToSign,
+        noteType: "register",
       });
 
       if (
@@ -628,6 +632,60 @@ export class FireblocksMidnightSDK {
     } catch (error: any) {
       throw new Error(
         `Error in solveScavengerHuntChallenge: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
+  };
+
+  public donateToScavengerHunt = async ({
+    vaultAccountId,
+    destAddress,
+  }: donateToScavengerHuntOpts): Promise<DonateToScavengerHuntResponse> => {
+    try {
+      const adaAddress = await this.fireblocksService.getVaultAccountAddress(
+        vaultAccountId,
+        SupportedAssetIds.ADA
+      );
+
+      const messageToSign = `Assign accumulated Scavenger rights to: ${destAddress}`;
+
+      const signedMessageResponse = await this.fireblocksService.signMessage({
+        chain: SupportedBlockchains.CARDANO,
+        originVaultAccountId: vaultAccountId,
+        destinationAddress: adaAddress,
+        amount: 0,
+        message: messageToSign,
+        noteType: "donate",
+      });
+
+      if (
+        !signedMessageResponse ||
+        !signedMessageResponse.content ||
+        !signedMessageResponse.signature ||
+        !signedMessageResponse.signature.fullSig
+      ) {
+        throw new Error(
+          "Invalid Fireblocks response: missing signature or public key"
+        );
+      }
+
+      const fullSig = signedMessageResponse.signature.fullSig;
+
+      const signature = await buildCoseSign1(messageToSign, fullSig!);
+
+      const result = await this.scavengerHuntService.donateToAddress({
+        destinationAddress: destAddress,
+        originalAddress: adaAddress,
+        signature,
+      });
+
+      this.logger.appendData("donation-history", result);
+
+      return result;
+    } catch (error: any) {
+      throw new Error(
+        `Error in donateToScavengerHunt: ${
           error instanceof Error ? error.message : error
         }`
       );

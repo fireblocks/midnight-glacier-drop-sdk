@@ -155,5 +155,10 @@ export const configureRouter = (api: FbNightApiService): Router => {
     apiController.solveScavengerHuntChallenge
   );
 
+  router.post(
+    "/scavenger-hunt/donate-to/:vaultAccountId/:destAddress",
+    apiController.donateToScavengerHunt
+  );
+
   return router;
 };

@@ -31,6 +31,7 @@ export enum TransactionType {
   REGISTER_SCAVENGER_HUNT_ADDRESS = "registerScavengerHuntAddress",
   GET_SCAVENGER_HUNT_CHALLENGE = "getScavengerHuntChallenge",
   SOLVE_SCAVENGER_HUNT_CHALLENGE = "solveScavengerHuntChallenge",
+  DONATE_TO_SCAVENGER_HUNT = "donateToScavengerHunt",
 }
 
 export interface checkAddressAllocationOpts {
@@ -67,7 +68,10 @@ export interface ExecuteTransactionOpts {
     | getClaimsHistoryOpts
     | makeClaimsOpts
     | trasnsferClaimsOpts
-    | getVaultAccountAddressesOpts;
+    | getVaultAccountAddressesOpts
+    | registerScavengerHuntAddressOpts
+    | solveScavengerHuntChallengeOpts
+    | donateToScavengerHuntOpts;
 }
 
 export interface registerScavengerHuntAddressOpts {
@@ -76,6 +80,11 @@ export interface registerScavengerHuntAddressOpts {
 
 export interface solveScavengerHuntChallengeOpts {
   vaultAccountId: string;
+}
+
+export interface donateToScavengerHuntOpts {
+  vaultAccountId: string;
+  destAddress: string;
 }
 
 export interface SdkManagerMetrics {
@@ -157,6 +166,7 @@ export interface SignMessageParams {
   vaultName?: string;
   originAddress?: string;
   message?: string;
+  noteType?: "claim" | "donate" | "register";
 }
 
 export interface RegistrationReceipt {
@@ -197,17 +207,6 @@ export interface SolutionResponse {
     signature: string;
   };
 }
-
-export interface DonationResponse {
-  status: string;
-  message: string;
-  donation_id: string;
-  original_address: string;
-  destination_address: string;
-  timestamp: string;
-  solutions_consolidated: number;
-}
-
 export interface WorkToStarRate {
   rates: number[];
 }
@@ -230,4 +229,16 @@ export interface ScavangerHuntChallangeResponse {
   total_challenges: number;
   current_day: number;
   next_challenge_starts_at: Date;
+}
+
+export interface DonateToScavengerHuntResponse {
+  message: string;
+  status?: string;
+  statusCode?: number;
+  donation_id?: string;
+  original_address?: string;
+  destination_address?: string;
+  timestamp?: string;
+  solutions_consolidated?: number;
+  error?: string;
 }

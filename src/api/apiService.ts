@@ -8,6 +8,8 @@ import {
   ApiServiceConfig,
   checkAddressAllocationOpts,
   ClaimHistoryResponse,
+  donateToScavengerHuntOpts,
+  DonateToScavengerHuntResponse,
   ExecuteTransactionOpts,
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
@@ -90,6 +92,7 @@ export class FbNightApiService {
     | VaultWalletAddress[]
     | RegistrationReceipt
     | ScavangerHuntChallangeResponse
+    | DonateToScavengerHuntResponse
   > => {
     let sdk: FireblocksMidnightSDK | undefined;
     try {
@@ -143,6 +146,12 @@ export class FbNightApiService {
         case TransactionType.SOLVE_SCAVENGER_HUNT_CHALLENGE:
           result = await sdk.solveScavengerHuntChallenge(
             params as solveScavengerHuntChallengeOpts
+          );
+          break;
+
+        case TransactionType.DONATE_TO_SCAVENGER_HUNT:
+          result = await sdk.donateToScavengerHunt(
+            params as donateToScavengerHuntOpts
           );
           break;
 
