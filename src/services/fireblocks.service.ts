@@ -11,7 +11,7 @@ import {
   generateTransactionPayload,
   getTxStatus,
 } from "../utils/fireblocks.utils.js";
-import { scavengerHuntNote, termsAndConditionsHash } from "../constants.js";
+import { termsAndConditionsHash } from "../constants.js";
 import { SignMessageParams, SupportedAssetIds } from "../types.js";
 import { getAssetIdsByBlockchain } from "../utils/general.js";
 import { Logger } from "../utils/logger.js";
@@ -105,6 +105,7 @@ export class FireblocksService {
         vaultName,
         originAddress,
         message,
+        noteType,
       } = params;
       const payload =
         message ??
@@ -112,26 +113,41 @@ export class FireblocksService {
 
       this.logger.info("signMessage payload", payload);
 
-      const assetId = getAssetIdsByBlockchain(chain);
+      let note: string;
 
-      // Format the amount for display (convert from smallest unit)
-      const displayAmount = (amount / Math.pow(10, 6)).toFixed(6);
-      const note = message
-        ? scavengerHuntNote
-        : vaultName && originAddress
-        ? `Claiming ${displayAmount} NIGHT for ${
-            assetId || chain
-          } from ${originAddress} in Vault ${vaultName} to address ${destinationAddress}`
-        : `Claiming ${displayAmount} NIGHT for ${
-            assetId || chain
-          } to address ${destinationAddress}`;
+      switch (noteType) {
+        case "donate":
+          note = `Scavenger Hunt Donation for address ${destinationAddress}`;
+          break;
+
+        case "register":
+          note = `Scavenger Hunt Registration for address ${destinationAddress}`;
+          break;
+
+        default: {
+          const assetId = getAssetIdsByBlockchain(chain);
+          const displayAmount = (amount / Math.pow(10, 6)).toFixed(6);
+
+          if (vaultName && originAddress) {
+            note = `Claiming ${displayAmount} NIGHT for ${
+              assetId || chain
+            } from ${originAddress} in Vault ${vaultName} to address ${destinationAddress}`;
+          } else {
+            note = `Claiming ${displayAmount} NIGHT for ${
+              assetId || chain
+            } to address ${destinationAddress}`;
+          }
+          break;
+        }
+      }
 
       const transactionPayload = await generateTransactionPayload(
         payload,
         chain,
         originVaultAccountId,
         this.fireblocksSDK,
-        note
+        note,
+        noteType
       );
 
       this.logger.info("signMessage transactionPayload", transactionPayload);
