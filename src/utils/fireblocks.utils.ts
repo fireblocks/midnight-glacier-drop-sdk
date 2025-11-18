@@ -21,17 +21,43 @@ Logger.setLogLevel(
 const logger = new Logger("utils:fireblocks");
 
 /**
- * Generates a transaction payload for signing messages on various blockchains.
+ * Generates a blockchain-specific transaction payload for message signing via Fireblocks.
  *
- * Depending on the specified blockchain, this function prepares the payload in the required format
- * and returns a `TransactionRequest` object suitable for Fireblocks SDK operations.
+ * This function constructs the appropriate transaction request format based on the target blockchain.
+ * Each blockchain has specific requirements for message signing (COSE_Sign1 for Cardano, EIP-191 for EVM chains, etc.).
  *
- * @param {string} payload - The message or data to be signed, as a string.
- * @param {SupportedBlockchains} chain - The blockchain for which the transaction payload is being generated.
- * @param {SupportedAssetIds} assetId - The asset identifier relevant to the transaction.
- * @param {string} originVaultAccountId - The originating vault account ID as a string.
- * @returns {Promise<TransactionRequest>} A promise that resolves to a `TransactionRequest` object containing the formatted payload.
- * @throws Will throw an error if the blockchain is not supported or if any internal error occurs.
+ * @param payload - The message or data to be signed as a UTF-8 string
+ * @param chain - The target blockchain network (Cardano, Ethereum, Bitcoin, etc.)
+ * @param originVaultAccountId - The Fireblocks vault account ID that will sign the message
+ * @param fireblocks - Initialized Fireblocks SDK instance
+ * @param note - Optional transaction note/description for Fireblocks UI
+ * @param noteType - Optional categorization of the signing operation ("claim", "donate", "register")
+ *
+ * @returns Promise resolving to a Fireblocks TransactionRequest object ready for signing
+ *
+ * @throws {Error} If the blockchain is not supported
+ * @throws {Error} If required data cannot be fetched (public key, address for XRP)
+ * @throws {Error} If COSE_Sign1 construction fails (Cardano)
+ *
+ * @remarks
+ * - **Cardano**: Uses COSE_Sign1 structure with EdDSA algorithm, BIP44 change path varies by note type
+ * - **Bitcoin**: Uses BTC_MESSAGE typed message format
+ * - **EVM Chains** (Ethereum, BNB, Avalanche, BAT): Uses EIP-191 personal_sign format
+ * - **XRP**: Requires fetching public key and address, uses transaction hash for signing
+ * - **Solana**: Raw message signing with hex-encoded payload
+ *
+ * @example
+ * ```typescript
+ * const payload = "STAR 1000000 to addr1... <hash>";
+ * const request = await generateTransactionPayload(
+ *   payload,
+ *   SupportedBlockchains.CARDANO,
+ *   "123",
+ *   fireblocksInstance,
+ *   "Claiming NIGHT tokens",
+ *   "claim"
+ * );
+ * ```
  */
 export const generateTransactionPayload = async (
   payload: string,
@@ -46,11 +72,13 @@ export const generateTransactionPayload = async (
     if (!assetId) {
       throw new Error("Unsupported blockchain for asset ID retrieval.");
     }
+
     switch (chain) {
       case SupportedBlockchains.CARDANO:
         const { MSL } = await import("cardano-web3-js");
         const payloadBytes = new TextEncoder().encode(payload);
 
+        // Build COSE_Sign1 structure per CIP-8/30
         const protectedHeaders = MSL.HeaderMap.new();
         protectedHeaders.set_algorithm_id(
           MSL.Label.from_algorithm_id(MSL.AlgorithmId.EdDSA)
@@ -65,7 +93,10 @@ export const generateTransactionPayload = async (
         const builder = MSL.COSESign1Builder.new(headers, payloadBytes, false);
         const sigStructureBytes = builder.make_data_to_sign().to_bytes();
         const content = Buffer.from(sigStructureBytes).toString("hex");
-        const bip44change = noteType === "donate" || "register" ? 0 : 2;
+
+        // BIP44 change path: 0 for external addresses (donate/register), 2 for internal (claim)
+        const bip44change =
+          noteType === "donate" || noteType === "register" ? 0 : 2;
 
         return {
           source: {
@@ -112,6 +143,7 @@ export const generateTransactionPayload = async (
       case SupportedBlockchains.BAT:
       case SupportedBlockchains.BNB:
       case SupportedBlockchains.AVALANCHE:
+        // EIP-191 personal_sign format
         const message = Buffer.from(payload).toString("hex");
         return {
           operation: TransactionOperation.TypedMessage,
@@ -134,6 +166,7 @@ export const generateTransactionPayload = async (
         };
 
       case SupportedBlockchains.XRP:
+        // Fetch public key and address for XRP transaction construction
         const publicKeyResponse =
           await fireblocks?.vaults.getPublicKeyInfoForAddress({
             vaultAccountId: originVaultAccountId,
@@ -165,7 +198,6 @@ export const generateTransactionPayload = async (
 
         const txForSigning = {
           SigningPubKey: publicKeyResponse?.data.publicKey,
-
           Account: senderAddress,
           Memos: [
             {
@@ -203,7 +235,6 @@ export const generateTransactionPayload = async (
           note: note,
           source: {
             type: TransferPeerPathType.VaultAccount,
-
             id: originVaultAccountId,
           },
           extraParameters: {
@@ -218,52 +249,88 @@ export const generateTransactionPayload = async (
         };
 
       default:
-        throw new Error("block chain is not supported.");
+        throw new Error(`Blockchain ${chain} is not supported.`);
     }
   } catch (error: any) {
     throw new Error(
-      `Error in generateTransactionPayload:
-        ${error instanceof Error ? error.message : error}`
+      `Error in generateTransactionPayload: ${
+        error instanceof Error ? error.message : error
+      }`
     );
   }
 };
 
 /**
- * Polls the status of a Fireblocks transaction until it is completed or reaches a terminal state.
- * Logs status changes to the console during polling.
- * Throws an error if the transaction is blocked, cancelled, failed, or rejected.
+ * Polls a Fireblocks transaction until it reaches a terminal state.
  *
- * @param {string} txId - The transaction ID to monitor.
- * @param {Fireblocks} fireblocks - The Fireblocks SDK instance for fetching transaction details.
- * @param {number} [pollingInterval] - Optional polling interval in milliseconds.
- * @returns {Promise<TransactionResponse>} Resolves with the transaction response when completed or broadcasting.
- * @throws {Error} If the transaction reaches a terminal failure state.
+ * Continuously monitors transaction status and waits for completion or broadcasting state.
+ * Logs status changes and throws errors for failure states (blocked, cancelled, failed, rejected).
+ *
+ * @param txId - The Fireblocks transaction ID to monitor
+ * @param fireblocks - Initialized Fireblocks SDK instance for API calls
+ * @param pollingInterval - Optional interval between status checks in milliseconds (default: 1000ms)
+ *
+ * @returns Promise resolving to the final TransactionResponse when completed or broadcasting
+ *
+ * @throws {Error} If transaction is blocked - policy or compliance issue
+ * @throws {Error} If transaction is cancelled - user or system cancellation
+ * @throws {Error} If transaction fails - signature failure or network error
+ * @throws {Error} If transaction is rejected - approval policy rejection
+ *
+ * @remarks
+ * **Terminal Success States:**
+ * - `COMPLETED` - Transaction fully processed and confirmed
+ * - `BROADCASTING` - Transaction submitted to blockchain network
+ *
+ * **Terminal Failure States:**
+ * - `BLOCKED` - Blocked by policy or compliance
+ * - `CANCELLED` - Manually cancelled
+ * - `FAILED` - Technical failure during processing
+ * - `REJECTED` - Rejected by approval policy
+ *
+ * **Transient States** (will continue polling):
+ * - `SUBMITTED` - Submitted for processing
+ * - `QUEUED` - Waiting in queue
+ * - `PENDING_SIGNATURE` - Awaiting signature
+ * - `PENDING_AUTHORIZATION` - Awaiting approval
+ * - `PENDING_3RD_PARTY_MANUAL_APPROVAL` - Waiting for external approval
+ * - `PENDING_3RD_PARTY` - Processing with third party
+ *
+ * @example
+ * ```typescript
+ * const txResponse = await fireblocks.transactions.createTransaction({...});
+ * const completedTx = await getTxStatus(txResponse.data.id, fireblocks, 2000);
+ * const signature = completedTx.signedMessages?.[0]?.signature;
+ * ```
  */
 export const getTxStatus = async (
   txId: string,
   fireblocks: Fireblocks,
-  pollingInterval?: number
+  pollingInterval: number = 1000
 ): Promise<TransactionResponse> => {
   try {
     let txResponse: FireblocksResponse<TransactionResponse> =
       await fireblocks.transactions.getTransaction({ txId });
     let lastStatus = txResponse.data.status;
+
     logger.info(
       `Transaction ${txResponse.data.id} is currently at status - ${txResponse.data.status}`
     );
 
+    // Poll until terminal state
     while (
       txResponse.data.status !== TransactionStateEnum.Completed &&
       txResponse.data.status !== TransactionStateEnum.Broadcasting
     ) {
       await new Promise((resolve) => setTimeout(resolve, pollingInterval));
+
       txResponse = await fireblocks.transactions.getTransaction({
         txId: txId,
       });
 
       if (txResponse.data.status !== lastStatus) {
         logger.info(
-          `Transaction ${txResponse.data.id} is currently at status - ${txResponse.data.status}`
+          `Transaction ${txResponse.data.id} status changed: ${lastStatus} → ${txResponse.data.status}`
         );
         lastStatus = txResponse.data.status;
       }
@@ -274,14 +341,23 @@ export const getTxStatus = async (
         case TransactionStateEnum.Failed:
         case TransactionStateEnum.Rejected:
           throw new Error(
-            `Signing request failed/blocked/cancelled: Transaction: ${txResponse.data.id} status is ${txResponse.data.status}\nSub-Status: ${txResponse.data.subStatus}`
+            `Transaction ${txResponse.data.id} failed with status: ${txResponse.data.status}\nSub-Status: ${txResponse.data.subStatus}`
           );
         default:
           break;
       }
     }
+
+    logger.info(
+      `Transaction ${txResponse.data.id} reached terminal state: ${txResponse.data.status}`
+    );
+
     return txResponse.data;
   } catch (error) {
+    logger.error(
+      `Error polling transaction ${txId}:`,
+      error instanceof Error ? error.message : error
+    );
     throw error;
   }
 };

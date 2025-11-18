@@ -1,5 +1,6 @@
 export * from "./FireblocksMidnightSDK.js";
-export * from "./types/index.js";
+export * from "./api/controllers/controller.js";
+export * from "./services/index.js";
 export * from "./utils/general.js";
 export * from "./utils/cardano.utils.js";
 export * from "./utils/fireblocks.utils.js";
@@ -7,5 +8,4 @@ export * from "./constants.js";
 export * from "./server.js";
 export * from "./pool/sdkManager.js";
 export * from "./api/apiService.js";
-export * from "./api/controllers/controller.js";
-export * from "./services/index.js";
+export * from "./types/index.js";
