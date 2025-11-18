@@ -8,6 +8,10 @@ export interface VaultDestinationOpts extends VaultAccountOpts {
   destAddress: string;
 }
 
+export interface VaultIndexDestinationOpts extends VaultIndexOpts {
+  destAddress: string;
+}
+
 export interface VaultIndexOpts extends VaultAccountOpts {
   index: number;
 }
