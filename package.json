@@ -8,7 +8,6 @@
     "build:w": "tsc -w",
     "start": "nodemon ./dist/app.js",
     "dev": "concurrently  \"npm:build:w\" \"npm:start\"",
-    "lint": "eslint . --fix",
     "docs": "typedoc src"
   },
   "keywords": [],
