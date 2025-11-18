@@ -511,6 +511,7 @@ export const configureRouter = (api: FbNightApiService): Router => {
    * /api/thaws/redeem/{vaultAccountId}:
    *   post:
    *     summary: Redeem NIGHT tokens during the redemption window
+   *     description: Builds, signs, and submits a redemption transaction. Optionally waits for confirmation.
    *     tags:
    *       - Thaws/Redemption
    *     parameters:
@@ -527,6 +528,29 @@ export const configureRouter = (api: FbNightApiService): Router => {
    *           type: number
    *           default: 0
    *         description: Address index to redeem from (default is 0)
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               waitForConfirmation:
+   *                 type: boolean
+   *                 default: false
+   *                 description: Wait for transaction confirmation before returning
+   *               pollingIntervalMs:
+   *                 type: number
+   *                 default: 15000
+   *                 description: Polling interval in milliseconds (default 15 seconds)
+   *               timeoutMs:
+   *                 type: number
+   *                 default: 300000
+   *                 description: Timeout in milliseconds (default 5 minutes)
+   *           example:
+   *             waitForConfirmation: true
+   *             pollingIntervalMs: 15000
+   *             timeoutMs: 300000
    *     responses:
    *       200:
    *         description: Redemption transaction submitted successfully
@@ -540,18 +564,37 @@ export const configureRouter = (api: FbNightApiService): Router => {
    *                   properties:
    *                     estimated_submission_time:
    *                       type: number
+   *                       description: Unix timestamp for estimated submission
    *                     transaction_id:
    *                       type: string
+   *                       description: Hex-encoded transaction ID
+   *                     finalStatus:
+   *                       type: string
+   *                       description: Final transaction status (only if waitForConfirmation=true)
+   *                       enum: [confirmed, failed]
    *       400:
-   *         description: Invalid request or no redeemable thaws
+   *         description: Invalid request, no redeemable thaws, or insufficient UTXOs
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *                 statusCode:
+   *                   type: number
+   *                 type:
+   *                   type: string
+   *                 service:
+   *                   type: string
    *       404:
-   *         description: Address not found
+   *         description: Address not found at specified index
    *       500:
    *         description: Server error
    *       503:
    *         description: Redemption window not open
    */
   router.post("/thaws/redeem/:vaultAccountId", apiController.redeemNight);
-
+  
   return router;
 };

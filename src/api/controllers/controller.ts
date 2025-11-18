@@ -294,12 +294,20 @@ export class ApiController {
     const { vaultAccountId } = req.params;
 
     const index = req.query.index ? Number(req.query.index) : 0;
+
+    const { waitForConfirmation, pollingIntervalMs, timeoutMs } = req.body;
     try {
       const result = await this.api.executeTransaction({
         vaultAccountId,
         chain: SupportedBlockchains.CARDANO,
         transactionType: TransactionType.REDEEM_NIGHT,
-        params: { vaultAccountId, index },
+        params: {
+          vaultAccountId,
+          index,
+          waitForConfirmation,
+          pollingIntervalMs,
+          timeoutMs,
+        },
       });
 
       res.status(200).json({ result });

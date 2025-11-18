@@ -882,9 +882,12 @@ export class FireblocksMidnightSDK {
   public redeemNight = async (params: {
     vaultAccountId: string;
     index: number;
-  }): Promise<ThawTransactionResponse> => {
+    waitForConfirmation?: boolean;
+    pollingIntervalMs?: number;
+    timeoutMs?: number;
+  }): Promise<ThawTransactionResponse & { finalStatus?: string }> => {
     try {
-      const { vaultAccountId } = params;
+      const { vaultAccountId, index } = params;
 
       if (!this.blockfrostProjectId) {
         throw new Error("Blockfrost project ID is required for redemption");
@@ -905,8 +908,18 @@ export class FireblocksMidnightSDK {
         );
       }
 
+      this.logger.info(`Using address at index ${index}: ${destAddress}`);
+
       await this.validateRedemptionWindow();
-      await this.validateRedeemableThaws(destAddress);
+
+      const schedule = await this.validateRedeemableThaws(destAddress);
+      const redeemableCount = schedule.thaws.filter(
+        (t) => t.status === ThawStatusSchedule.REDEEMABLE
+      ).length;
+
+      this.logger.info(
+        `Found ${redeemableCount} redeemable thaw(s) for address ${destAddress}`
+      );
 
       const utxoHex = await this.fetchAndConvertUtxo(destAddress);
       const txBuildResponse = await this.buildRedemptionTransaction(
@@ -914,9 +927,14 @@ export class FireblocksMidnightSDK {
         utxoHex
       );
 
+      this.logger.info(
+        `Transaction will redeem ${txBuildResponse.redeemed_amount} NIGHT tokens`
+      );
+
       const witnessSetHex = await this.signRedemptionTransaction(
         vaultAccountId,
-        txBuildResponse.transaction_id
+        txBuildResponse.transaction_id,
+        index
       );
 
       const submitResponse = await this.submitRedemptionTransaction(
@@ -926,6 +944,26 @@ export class FireblocksMidnightSDK {
       );
 
       this.logRedemption(destAddress, submitResponse);
+
+      if (params.waitForConfirmation) {
+        this.logger.info(
+          `Waiting for transaction confirmation (timeout: ${
+            params.timeoutMs || 300000
+          }ms)...`
+        );
+
+        const finalStatus = await this.waitForConfirmation(
+          destAddress,
+          submitResponse.transaction_id,
+          params.timeoutMs || 300000,
+          params.pollingIntervalMs || 15000
+        );
+
+        return {
+          ...submitResponse,
+          finalStatus,
+        };
+      }
 
       return submitResponse;
     } catch (error: any) {
@@ -942,6 +980,118 @@ export class FireblocksMidnightSDK {
     }
   };
 
+  private waitForConfirmation = async (
+    destAddress: string,
+    transactionId: string,
+    timeoutMs: number,
+    intervalMs: number
+  ): Promise<string> => {
+    const startTime = Date.now();
+    let lastStatus: string = "unknown";
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const status = await this.thawsService.getTransactionStatus(
+          destAddress,
+          transactionId
+        );
+
+        lastStatus = status.status;
+
+        this.logger.info(
+          `Transaction ${transactionId} status: ${status.status} (${status.redeemed_amount} NIGHT)`
+        );
+
+        if (status.status === "confirmed") {
+          this.logger.info(
+            `Transaction ${transactionId} confirmed! Redeemed: ${status.redeemed_amount} NIGHT`
+          );
+          return status.status;
+        }
+
+        if (status.status === "failed") {
+          throw new Error(
+            `Transaction ${transactionId} failed during confirmation`
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      } catch (error: any) {
+        if (error instanceof MidnightApiError) {
+          throw error;
+        }
+
+        this.logger.warn(
+          `Error checking status (will retry): ${error.message}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+    }
+
+    throw new Error(
+      `Transaction confirmation timeout after ${timeoutMs}ms. Last status: ${lastStatus}`
+    );
+  };
+
+  private validateRedeemableThaws = async (
+    destAddress: string
+  ): Promise<ThawScheduleResponse> => {
+    const addressSchedule = await this.thawsService.getThawSchedule(
+      destAddress
+    );
+
+    const redeemableThaws = addressSchedule.thaws.filter(
+      (t) => t.status === ThawStatusSchedule.REDEEMABLE
+    );
+
+    if (redeemableThaws.length === 0) {
+      throw new Error(
+        `No redeemable thaws available for address: ${destAddress}`
+      );
+    }
+
+    return addressSchedule;
+  };
+
+  private signRedemptionTransaction = async (
+    vaultAccountId: string,
+    transactionId: string,
+    addressIndex: number = 0
+  ): Promise<string> => {
+    const transactionPayload = {
+      assetId: SupportedAssetIds.ADA,
+      operation: TransactionOperation.Raw,
+      source: {
+        type: TransferPeerPathType.VaultAccount,
+        id: vaultAccountId,
+        addressIndex: addressIndex,
+      },
+      note: `Redeem NIGHT tokens from address index ${addressIndex}`,
+      extraParameters: {
+        rawMessageData: {
+          messages: [{ content: transactionId }],
+        },
+      },
+    };
+
+    const fbResponse = await this.fireblocksService.broadcastTransaction(
+      transactionPayload
+    );
+
+    if (!fbResponse?.signature || !fbResponse.signature.fullSig) {
+      throw new Error("Missing signature from Fireblocks");
+    }
+
+    if (!fbResponse.publicKey) {
+      throw new Error("Missing public key from Fireblocks");
+    }
+
+    return this.createWitnessSet(
+      fbResponse.publicKey,
+      fbResponse.signature.fullSig
+    );
+  };
+
   private validateRedemptionWindow = async (): Promise<void> => {
     try {
       const config = await this.thawsService.getPhaseConfig();
@@ -955,59 +1105,6 @@ export class FireblocksMidnightSDK {
     } catch (error: any) {
       this.logger.error(
         `Redemption window validation failed: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-      throw error;
-    }
-  };
-
-  private validateRedeemableThaws = async (
-    destAddress: string
-  ): Promise<void> => {
-    try {
-      const addressSchedule = await this.thawsService.getThawSchedule(
-        destAddress
-      );
-
-      const redeemableThaws = addressSchedule.thaws.filter(
-        (t) => t.status === ThawStatusSchedule.REDEEMABLE
-      );
-
-      if (redeemableThaws.length === 0) {
-        throw new Error(
-          `No redeemable thaws available for address: ${destAddress}`
-        );
-      }
-    } catch (error: any) {
-      this.logger.error(
-        `Redeemable thaws validation failed: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-      throw error;
-    }
-  };
-
-  private fetchAndConvertUtxo = async (
-    destAddress: string
-  ): Promise<string> => {
-    try {
-      if (!this.lucid) {
-        await this.initializeLucid();
-      }
-
-      const utxos = await this.lucid!.utxosAt(destAddress);
-
-      if (!utxos || utxos.length === 0) {
-        throw new Error(`No UTXOs found for address: ${destAddress}`);
-      }
-
-      const selectedUtxo = this.selectLargestUtxo(utxos);
-      return this.convertUtxoToHex(selectedUtxo, destAddress);
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to fetch and convert UTXO: ${
           error instanceof Error ? error.message : error
         }`
       );
@@ -1047,81 +1144,140 @@ export class FireblocksMidnightSDK {
     destAddress: string,
     utxoHex: string
   ): Promise<TransactionBuildResponse> => {
-    try {
-      const buildRequest: TransactionBuildRequest = {
-        change_address: destAddress,
-        funding_utxos: [utxoHex],
-        collateral_utxos: [],
-      };
+    const buildRequest: TransactionBuildRequest = {
+      change_address: destAddress,
+      funding_utxos: [utxoHex],
+      collateral_utxos: await this.getCollateralUtxos(destAddress),
+    };
 
-      const txBuildResponse = await this.thawsService.buildThawTransaction(
-        destAddress,
-        buildRequest
-      );
+    const txBuildResponse = await this.thawsService.buildThawTransaction(
+      destAddress,
+      buildRequest
+    );
 
-      this.logger.info(
-        `Built thaw transaction: ${txBuildResponse.transaction_id}`
-      );
-
-      return txBuildResponse;
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to build redemption transaction: ${
-          error instanceof Error ? error.message : error
-        }`
+    if (txBuildResponse.require_thawing_extra_signature) {
+      this.logger.warn(
+        `Transaction ${txBuildResponse.transaction_id} requires additional thawing signature`
       );
       throw new Error(
-        `Failed to build redemption transaction: ${
+        "Additional thawing signature required but not implemented. This transaction cannot be completed."
+      );
+    }
+
+    this.logger.info(
+      `Built thaw transaction: ${txBuildResponse.transaction_id}, redeemed amount: ${txBuildResponse.redeemed_amount}`
+    );
+
+    return txBuildResponse;
+  };
+
+  /**
+   * Fetches and prepares collateral UTXOs for transaction building
+   * Collateral is required for smart contract transactions in Cardano
+   */
+  private getCollateralUtxos = async (
+    destAddress: string
+  ): Promise<string[]> => {
+    try {
+      if (!this.lucid) {
+        await this.initializeLucid();
+      }
+
+      const utxos = await this.lucid!.utxosAt(destAddress);
+
+      if (!utxos || utxos.length === 0) {
+        this.logger.warn(
+          `No UTXOs available for collateral at address: ${destAddress}`
+        );
+        return [];
+      }
+
+      // Filter UTXOs suitable for collateral:
+      // - Should contain only ADA (no native tokens)
+      // - Should have at least 5 ADA (5,000,000 lovelace)
+      const MIN_COLLATERAL_LOVELACE = 5_000_000n;
+
+      const collateralCandidates = utxos.filter((utxo) => {
+        const hasOnlyAda =
+          Object.keys(utxo.assets).length === 1 &&
+          utxo.assets.lovelace !== undefined;
+        const hasEnoughAda =
+          (utxo.assets.lovelace || 0n) >= MIN_COLLATERAL_LOVELACE;
+        return hasOnlyAda && hasEnoughAda;
+      });
+
+      if (collateralCandidates.length === 0) {
+        this.logger.warn(
+          `No suitable collateral UTXOs found (need pure ADA UTXO with at least 5 ADA)`
+        );
+        return [];
+      }
+
+      // Select up to 3 collateral UTXOs (Cardano limit)
+      const selectedCollateral = collateralCandidates
+        .slice(0, 3)
+        .map((utxo) => this.convertUtxoToHex(utxo, destAddress));
+
+      this.logger.info(
+        `Selected ${selectedCollateral.length} collateral UTXO(s)`
+      );
+
+      return selectedCollateral;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to get collateral UTXOs: ${
           error instanceof Error ? error.message : error
         }`
       );
+      // Return empty array and let the API decide if it's needed
+      return [];
     }
   };
 
-  private signRedemptionTransaction = async (
-    vaultAccountId: string,
-    transactionId: string
+  /**
+   * Fetches and converts the largest UTXO for funding the redemption transaction
+   * Ensures we don't use UTXOs that might be needed for collateral
+   */
+  private fetchAndConvertUtxo = async (
+    destAddress: string
   ): Promise<string> => {
-    try {
-      const transactionPayload = {
-        assetId: SupportedAssetIds.ADA,
-        operation: TransactionOperation.Raw,
-        source: {
-          type: TransferPeerPathType.VaultAccount,
-          id: vaultAccountId,
-        },
-        note: `Redeem NIGHT tokens`,
-        extraParameters: {
-          rawMessageData: {
-            messages: [{ content: transactionId }],
-          },
-        },
-      };
-
-      const fbResponse = await this.fireblocksService.broadcastTransaction(
-        transactionPayload
-      );
-
-      if (!fbResponse?.signature || !fbResponse.signature.fullSig) {
-        throw new Error("Missing signature from Fireblocks");
-      }
-
-      return this.createWitnessSet(
-        fbResponse.publicKey!,
-        fbResponse.signature.fullSig
-      );
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to sign redemption transaction: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-      throw new Error(
-        `Failed to sign redemption transaction: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
+    if (!this.lucid) {
+      await this.initializeLucid();
     }
+
+    const utxos = await this.lucid!.utxosAt(destAddress);
+
+    if (!utxos || utxos.length === 0) {
+      throw new Error(`No UTXOs found for address: ${destAddress}`);
+    }
+
+    // Filter out UTXOs that might be used as collateral
+    const COLLATERAL_EXACT = 5_000_000n;
+
+    const fundingCandidates = utxos.filter((utxo) => {
+      const isExactCollateralAmount = utxo.assets.lovelace === COLLATERAL_EXACT;
+      const hasOnlyAda = Object.keys(utxo.assets).length === 1;
+
+      // Exclude UTXOs that look like dedicated collateral
+      return !(isExactCollateralAmount && hasOnlyAda);
+    });
+
+    if (fundingCandidates.length === 0) {
+      this.logger.warn(
+        "No suitable funding UTXOs found, using all UTXOs including potential collateral"
+      );
+      // Fall back to using any UTXO
+      const selectedUtxo = this.selectLargestUtxo(utxos);
+      return this.convertUtxoToHex(selectedUtxo, destAddress);
+    }
+
+    const selectedUtxo = this.selectLargestUtxo(fundingCandidates);
+
+    this.logger.info(
+      `Selected funding UTXO with ${selectedUtxo.assets.lovelace} lovelace`
+    );
+
+    return this.convertUtxoToHex(selectedUtxo, destAddress);
   };
 
   private createWitnessSet = (

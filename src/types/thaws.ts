@@ -8,8 +8,11 @@ import {
 
 export type thawScheduleOpts = VaultIndexOpts;
 export type thawStatusOpts = TransactionStatusOpts;
-export type redeemNightOpts = VaultIndexOpts;
-
+export interface redeemNightOpts extends VaultIndexOpts {
+  waitForConfirmation?: boolean;
+  pollingIntervalMs?: number;
+  timeoutMs?: number;
+}
 export interface PhaseConfigResponse {
   genesis_timestamp: number;
   jitter_strata_count: number;
