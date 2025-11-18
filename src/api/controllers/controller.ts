@@ -206,12 +206,14 @@ export class ApiController {
   public solveScavengerHuntChallenge = async (req: Request, res: Response) => {
     const { vaultAccountId } = req.params;
 
+    const index = req.query.index ? Number(req.query.index) : 0;
+
     try {
       const result = await this.api.executeTransaction({
         vaultAccountId,
         chain: SupportedBlockchains.CARDANO,
         transactionType: TransactionType.SOLVE_SCAVENGER_HUNT_CHALLENGE,
-        params: { vaultAccountId },
+        params: { vaultAccountId, index },
       });
 
       res.status(200).json({ result });
@@ -223,12 +225,14 @@ export class ApiController {
   public donateToScavengerHunt = async (req: Request, res: Response) => {
     const { vaultAccountId, destAddress } = req.params;
 
+    const index = req.query.index ? Number(req.query.index) : 0;
+
     try {
       const result = await this.api.executeTransaction({
         vaultAccountId,
         chain: SupportedBlockchains.CARDANO,
         transactionType: TransactionType.DONATE_TO_SCAVENGER_HUNT,
-        params: { vaultAccountId, destAddress },
+        params: { vaultAccountId, index, destAddress },
       });
 
       res.status(200).json({ result });
@@ -289,12 +293,13 @@ export class ApiController {
   public redeemNight = async (req: Request, res: Response) => {
     const { vaultAccountId } = req.params;
 
+    const index = req.query.index ? Number(req.query.index) : 0;
     try {
       const result = await this.api.executeTransaction({
         vaultAccountId,
         chain: SupportedBlockchains.CARDANO,
         transactionType: TransactionType.REDEEM_NIGHT,
-        params: { vaultAccountId },
+        params: { vaultAccountId, index },
       });
 
       res.status(200).json({ result });

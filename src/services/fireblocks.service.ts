@@ -182,23 +182,30 @@ export class FireblocksService {
    */
   public getVaultAccountAddress = async (
     vaultAccountId: string,
-    assetId: SupportedAssetIds
-  ): Promise<VaultWalletAddress[]> => {
+    assetId: SupportedAssetIds,
+    index: number = 0
+  ): Promise<VaultWalletAddress> => {
     try {
-      const addressesResponse =
-        await this.fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
-          vaultAccountId,
-          assetId,
-        });
-
-      const addresses = addressesResponse.data.addresses;
-      if (!addresses || addresses.length === 0) {
+      const addressesResponse = await this.getVaultAccountAddresses(
+        vaultAccountId,
+        assetId
+      );
+      if (!addressesResponse || addressesResponse.length === 0) {
         throw new Error(
           `No addresses found for vault account ${vaultAccountId} and asset ${assetId}`
         );
       }
 
-      return addresses;
+      const filteredAddresses = addressesResponse.filter(
+        (addr) => addr.bip44AddressIndex === index
+      );
+      if (filteredAddresses.length === 0) {
+        throw new Error(
+          `No address found for vault account ${vaultAccountId}, asset ${assetId}, and index ${index}`
+        );
+      }
+
+      return filteredAddresses[0];
     } catch (error: any) {
       throw new Error(
         `Failed to get address for vault account ${vaultAccountId}: ${error.message}`

@@ -114,12 +114,12 @@ export class FireblocksMidnightSDK {
       }
 
       const fireblocksService = new FireblocksService(fireblocksConfig);
-      const addresses = await fireblocksService.getVaultAccountAddress(
+      const wallet = await fireblocksService.getVaultAccountAddress(
         vaultAccountId,
         assetId
       );
 
-      const address = addresses[0].address;
+      const address = wallet.address;
 
       if (!address) {
         throw new Error(
@@ -637,14 +637,13 @@ export class FireblocksMidnightSDK {
     index,
   }: registerScavengerHuntAddressOpts): Promise<RegistrationReceipt> => {
     try {
-      const addresses = await this.fireblocksService.getVaultAccountAddress(
+      const adaWallet = await this.fireblocksService.getVaultAccountAddress(
         vaultAccountId,
-        SupportedAssetIds.ADA
+        SupportedAssetIds.ADA,
+        index
       );
 
-      const adaAddress = addresses.filter(
-        (addr) => addr.bip44AddressIndex === index
-      )[0]?.address;
+      const adaAddress = adaWallet.address;
 
       if (!adaAddress) {
         throw new Error(
@@ -715,6 +714,7 @@ export class FireblocksMidnightSDK {
 
   public solveScavengerHuntChallenge = async ({
     vaultAccountId,
+    index,
   }: solveScavengerHuntChallengeOpts): Promise<{
     nonce: string;
     hash: string;
@@ -722,12 +722,13 @@ export class FireblocksMidnightSDK {
     timeMs: number;
   }> => {
     try {
-      const addresses = await this.fireblocksService.getVaultAccountAddress(
+      const adaWallet = await this.fireblocksService.getVaultAccountAddress(
         vaultAccountId,
-        SupportedAssetIds.ADA
+        SupportedAssetIds.ADA,
+        index
       );
 
-      const adaAddress = addresses[0].address;
+      const adaAddress = adaWallet.address;
 
       if (!adaAddress) {
         throw new Error(
@@ -770,15 +771,17 @@ export class FireblocksMidnightSDK {
 
   public donateToScavengerHunt = async ({
     vaultAccountId,
+    index,
     destAddress,
   }: donateToScavengerHuntOpts): Promise<DonateToScavengerHuntResponse> => {
     try {
-      const addresses = await this.fireblocksService.getVaultAccountAddress(
+      const adaWallet = await this.fireblocksService.getVaultAccountAddress(
         vaultAccountId,
-        SupportedAssetIds.ADA
+        SupportedAssetIds.ADA,
+        index
       );
 
-      const adaAddress = addresses[0].address;
+      const adaAddress = adaWallet.address;
 
       if (!adaAddress) {
         throw new Error(
@@ -848,20 +851,13 @@ export class FireblocksMidnightSDK {
     index: number;
   }): Promise<ThawScheduleResponse> => {
     const { vaultAccountId, index } = params;
-    const addresses = await this.fireblocksService.getVaultAccountAddress(
+    const adaWallet = await this.fireblocksService.getVaultAccountAddress(
       vaultAccountId,
-      SupportedAssetIds.ADA
+      SupportedAssetIds.ADA,
+      index
     );
 
-    if (addresses.length === 0) {
-      throw new Error(
-        `No ADA addresses found for vault account ${vaultAccountId}`
-      );
-    }
-
-    const adaAddress = addresses.filter(
-      (addr) => addr.bip44AddressIndex === index
-    )[0]?.address;
+    const adaAddress = adaWallet.address;
 
     if (!adaAddress) {
       throw new Error(
@@ -885,6 +881,7 @@ export class FireblocksMidnightSDK {
 
   public redeemNight = async (params: {
     vaultAccountId: string;
+    index: number;
   }): Promise<ThawTransactionResponse> => {
     try {
       const { vaultAccountId } = params;
@@ -893,12 +890,14 @@ export class FireblocksMidnightSDK {
         throw new Error("Blockfrost project ID is required for redemption");
       }
 
-      const addresses = await this.fireblocksService.getVaultAccountAddress(
+      const addresses = await this.fireblocksService.getVaultAccountAddresses(
         vaultAccountId,
         SupportedAssetIds.ADA
       );
 
-      const destAddress = addresses[0].address;
+      const destAddress = addresses.filter(
+        (addr) => addr.bip44AddressIndex === params.index
+      )[0]?.address;
 
       if (!destAddress) {
         throw new Error(

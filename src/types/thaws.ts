@@ -2,14 +2,13 @@ import { ThawStatusSchedule } from "./enums.js";
 import {
   UTCTime,
   HexEncoded,
-  VaultAccountOpts,
   VaultIndexOpts,
   TransactionStatusOpts,
 } from "./base.js";
 
 export type thawScheduleOpts = VaultIndexOpts;
 export type thawStatusOpts = TransactionStatusOpts;
-export type redeemNightOpts = VaultAccountOpts;
+export type redeemNightOpts = VaultIndexOpts;
 
 export interface PhaseConfigResponse {
   genesis_timestamp: number;

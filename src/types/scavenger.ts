@@ -1,11 +1,10 @@
 import {
-  VaultAccountOpts,
-  VaultDestinationOpts,
+  VaultIndexDestinationOpts,
   VaultIndexOpts,
 } from "./base.js";
 
-export type solveScavengerHuntChallengeOpts = VaultAccountOpts;
-export type donateToScavengerHuntOpts = VaultDestinationOpts;
+export type solveScavengerHuntChallengeOpts = VaultIndexOpts;
+export type donateToScavengerHuntOpts = VaultIndexDestinationOpts;
 export type registerScavengerHuntAddressOpts = VaultIndexOpts;
 
 export interface RegistrationReceipt {
