@@ -7,7 +7,7 @@ const options = {
     openapi: "3.0.0",
     info: {
       title: "Midnight Glacier Drop Fireblocks SDK API",
-      version: "1.0.2",
+      version: "1.2.0",
       description: "API documentation for Midnight Glacier Drop Fireblocks SDK",
     },
     servers: [
