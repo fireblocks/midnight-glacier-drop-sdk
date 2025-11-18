@@ -1,4 +1,3 @@
-// utils/errorHandler.ts
 import axios from "axios";
 import { MidnightApiError } from "../types/index.js";
 import { Logger } from "./logger.js";
@@ -26,7 +25,6 @@ export class ErrorHandler {
       this.logger.error("Response Data:", data);
       this.logger.error("Request URL:", error.config?.url);
 
-      // Extract meaningful error message
       const message =
         data?.message ||
         data?.info ||
@@ -47,7 +45,6 @@ export class ErrorHandler {
       return error;
     }
 
-    // Non-Axios errors
     this.logger.error(`Unexpected error ${context}:`, error);
     return new MidnightApiError(
       error instanceof Error ? error.message : `Error ${context}`,
