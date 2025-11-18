@@ -1,9 +1,9 @@
-import dotenv from "dotenv";
+import { readFileSync } from "fs";
 import {
   BasePath,
   ConfigurationOptions as FireblocksConfig,
 } from "@fireblocks/ts-sdk";
-import { readFileSync } from "fs";
+import dotenv from "dotenv";
 dotenv.config();
 
 const secretKeyPath = process.env.FIREBLOCKS_SECRET_KEY_PATH!;

@@ -9,38 +9,67 @@ import * as lucid from "lucid-cardano";
 import { FireblocksService } from "./services/fireblocks.service.js";
 import { ClaimApiService } from "./services/claim.api.service.js";
 import { ProvetreeService } from "./services/provetree.service.js";
+import { nightTokenName, tokenTransactionFee } from "./constants.js";
+import { getAssetIdsByBlockchain } from "./utils/general.js";
 import {
+  buildCoseSign1,
+  calculateTtl,
+  fetchAndSelectUtxos,
+} from "./utils/cardano.utils.js";
+
+import { config } from "./utils/config.js";
+import { ScavengerHuntService } from "./services/scavengerHunt.service.js";
+import { Logger } from "./utils/logger.js";
+import { ThawsService } from "./services/thaws.service.js";
+import { BlockFrostAPI } from "@blockfrost/blockfrost-js";
+import {
+  NoteType,
+  SupportedAssetIds,
+  SupportedBlockchains,
+  ThawStatusSchedule,
   checkAddressAllocationOpts,
   ClaimHistoryResponse,
   getClaimsHistoryOpts,
   getVaultAccountAddressesOpts,
   makeClaimsOpts,
   SubmitClaimResponse,
-  SupportedAssetIds,
-  SupportedBlockchains,
   TransferClaimsResponse,
   trasnsferClaimsOpts,
-} from "./types.js";
-import { nightTokenName, tokenTransactionFee } from "./constants.js";
-import { getAssetIdsByBlockchain } from "./utils/general.js";
-import { calculateTtl, fetchAndSelectUtxos } from "./utils/cardano.utils.js";
-
-import { config } from "./utils/config.js";
+  MidnightApiError,
+  donateToScavengerHuntOpts,
+  DonateToScavengerHuntResponse,
+  registerScavengerHuntAddressOpts,
+  RegistrationReceipt,
+  ScavangerHuntChallangeResponse,
+  solveScavengerHuntChallengeOpts,
+  PhaseConfigResponse,
+  ThawScheduleResponse,
+  ThawTransactionResponse,
+  ThawTransactionStatus,
+  TransactionBuildRequest,
+  TransactionBuildResponse,
+  TransactionSubmissionRequest,
+} from "./types/index.js";
 
 export class FireblocksMidnightSDK {
   private fireblocksService: FireblocksService;
   private claimApiService: ClaimApiService;
   private provetreeService: ProvetreeService;
+  private scavengerHuntService: ScavengerHuntService;
+  private thawsService: ThawsService;
   private assetId: SupportedAssetIds;
   private vaultAccountId: string;
   private address: string;
   private blockfrostProjectId?: string;
   private lucid?: lucid.Lucid;
+  private readonly logger = new Logger("app:fireblocks-midnight-sdk");
 
   constructor(params: {
     fireblocksService: FireblocksService;
     claimApiService: ClaimApiService;
     provetreeService: ProvetreeService;
+    scavengerHuntService: ScavengerHuntService;
+    thawsService: ThawsService;
     assetId: SupportedAssetIds;
     vaultAccountId: string;
     address: string;
@@ -49,6 +78,8 @@ export class FireblocksMidnightSDK {
     this.fireblocksService = params.fireblocksService;
     this.claimApiService = params.claimApiService;
     this.provetreeService = params.provetreeService;
+    this.scavengerHuntService = params.scavengerHuntService;
+    this.thawsService = params.thawsService;
     this.assetId = params.assetId;
     this.vaultAccountId = params.vaultAccountId;
     this.address = params.address;
@@ -74,6 +105,8 @@ export class FireblocksMidnightSDK {
     chain: SupportedBlockchains;
   }): Promise<FireblocksMidnightSDK> => {
     try {
+      const logger = new Logger(`app:${params.chain}:fireblocks-midnight-sdk`);
+
       const { fireblocksConfig, vaultAccountId, chain } = params;
       const assetId = getAssetIdsByBlockchain(chain);
       if (!assetId) {
@@ -81,25 +114,37 @@ export class FireblocksMidnightSDK {
       }
 
       const fireblocksService = new FireblocksService(fireblocksConfig);
-      const address = await fireblocksService.getVaultAccountAddress(
+      const wallet = await fireblocksService.getVaultAccountAddress(
         vaultAccountId,
         assetId
       );
 
+      const address = wallet.address;
+
+      if (!address) {
+        throw new Error(
+          `Invalid address found for vault account ${vaultAccountId} and asset ${assetId}`
+        );
+      }
+
       const blockfrostProjectId = config.BLOCKFROST_PROJECT_ID;
       if (!blockfrostProjectId) {
-        console.warn(
-          "[warn] BLOCKFROST_PROJECT_ID is not configured. Some features may not work."
+        logger.warn(
+          "BLOCKFROST_PROJECT_ID is not configured. Some features may not work."
         );
       }
 
       const claimApiService = new ClaimApiService();
       const provetreeService = new ProvetreeService();
+      const scavengerHuntService = new ScavengerHuntService();
+      const thawsService = new ThawsService();
 
       const sdkInstance = new FireblocksMidnightSDK({
         fireblocksService,
         claimApiService,
         provetreeService,
+        scavengerHuntService,
+        thawsService,
         assetId,
         vaultAccountId,
         address,
@@ -138,18 +183,10 @@ export class FireblocksMidnightSDK {
   public checkAddressAllocation = async ({
     chain,
   }: checkAddressAllocationOpts): Promise<number> => {
-    try {
-      return await this.provetreeService.checkAddressAllocation(
-        this.address,
-        chain
-      );
-    } catch (error: any) {
-      throw new Error(
-        `Error in checkAddressAllocation: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-    }
+    return await this.provetreeService.checkAddressAllocation(
+      this.address,
+      chain
+    );
   };
 
   /**
@@ -162,17 +199,10 @@ export class FireblocksMidnightSDK {
   public getClaimsHistory = async ({
     chain,
   }: getClaimsHistoryOpts): Promise<ClaimHistoryResponse[]> => {
-    try {
-      return await this.claimApiService.getClaimsHistory(
-        chain as SupportedBlockchains,
-        this.address
-      );
-    } catch (error: any) {
-      throw new Error(
-        `Error in getClaimsHistory:
-        ${error instanceof Error ? error.message : error}`
-      );
-    }
+    return await this.claimApiService.getClaimsHistory(
+      chain as SupportedBlockchains,
+      this.address
+    );
   };
 
   /**
@@ -198,15 +228,15 @@ export class FireblocksMidnightSDK {
           chain as SupportedBlockchains
         );
 
-      const fbResoponse = await this.fireblocksService.signMessage(
-        chain as SupportedBlockchains,
-        this.assetId,
-        this.vaultAccountId,
+      const fbResoponse = await this.fireblocksService.signMessage({
+        chain: chain as SupportedBlockchains,
+        originVaultAccountId: this.vaultAccountId,
         destinationAddress,
-        allocationValue,
-        this.vaultAccountId,
-        originAddress
-      );
+        amount: allocationValue,
+        vaultName: this.vaultAccountId,
+        originAddress,
+        noteType: NoteType.CLAIM,
+      });
 
       if (
         !fbResoponse ||
@@ -254,28 +284,30 @@ export class FireblocksMidnightSDK {
         publicKey
       );
 
+      this.logger.appendData("claims-history", {
+        address: claimResponse[0].address,
+        amount: claimResponse[0].amount,
+        claim_id: claimResponse[0].claim_id,
+        dest_address: claimResponse[0].dest_address,
+      });
+
       return claimResponse;
     } catch (error: any) {
-      throw new Error(error instanceof Error ? error.message : error);
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("makeClaims error:", error.message);
+      throw new Error(
+        `Error making claims for ${this.address} on ${chain}: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
     }
   };
 
   /**
    * Transfers native tokens and ADA to a recipient address on Cardano.
-   *
-   * This method:
-   * - Selects UTXOs to cover the required token and ADA amounts.
-   * - Constructs and signs the transaction using Fireblocks.
-   * - Submits the transaction to the Cardano network.
-   *
-   * @param {trasnsferClaimsOpts} opts - Options for transferring claims.
-   * @param {string} opts.recipientAddress - Recipient's Bech32 address.
-   * @param {string} opts.tokenPolicyId - Native token policy ID.
-   * @param {number} opts.requiredTokenAmount - Amount of token to transfer.
-   * @param {number} [opts.minRecipientLovelace=1_200_000] - Minimum ADA for recipient (default: 1,200,000).
-   * @param {number} [opts.minChangeLovelace=1_200_000] - Minimum ADA for change (default: 1,200,000).
-   * @returns {Promise<TransferClaimsResponse>} Transaction hash, sender address, and token name.
-   * @throws {Error} If UTXOs/balance are insufficient, or Fireblocks signing fails.
    */
   public transferClaims = async ({
     recipientAddress,
@@ -284,191 +316,51 @@ export class FireblocksMidnightSDK {
     minRecipientLovelace = 1_200_000,
     minChangeLovelace = 1_200_000,
   }: trasnsferClaimsOpts): Promise<TransferClaimsResponse> => {
-    if (!this.blockfrostProjectId) {
-      throw new Error("Blockfrost project id was not provided.");
-    }
     try {
-      const transactionFee = BigInt(tokenTransactionFee);
+      this.validateBlockfrostConfig();
 
-      if (!this.blockfrostProjectId) {
-        throw new Error("BLOCKFROST_PROJECT_ID is not configured.");
-      }
-
-      // Initialize Lucid if not already initialized
       if (!this.lucid) {
-        const network = this.blockfrostProjectId.includes("mainnet")
-          ? "Mainnet"
-          : this.blockfrostProjectId.includes("preprod")
-          ? "Preprod"
-          : "Preview";
-        this.lucid = await lucid.Lucid.new(
-          new lucid.Blockfrost(this.blockfrostProjectId, this.blockfrostProjectId),
-          network
-        );
+        await this.initializeLucid();
       }
+      const { blockfrost, utxos, accumulatedAda, accumulatedTokenAmount } =
+        await this.fetchAndValidateUtxos(
+          tokenPolicyId,
+          requiredTokenAmount,
+          minRecipientLovelace,
+          minChangeLovelace
+        );
 
-      const utxoResult = await fetchAndSelectUtxos(
-        this.address,
-        this.blockfrostProjectId,
+      const convertedUtxos = this.convertUtxosForLucid(utxos);
+
+      const unsignedTx = await this.buildTransferTransaction({
+        blockfrost,
+        convertedUtxos,
+        recipientAddress,
         tokenPolicyId,
         requiredTokenAmount,
-        Number(transactionFee),
         minRecipientLovelace,
-        minChangeLovelace
-      );
-
-      if (!utxoResult) throw new Error("No UTXOs found");
-
-      const {
-        blockfrost,
-        selectedUtxos,
         accumulatedAda,
         accumulatedTokenAmount,
-      } = utxoResult;
-
-      const adaTarget = BigInt(minRecipientLovelace) + transactionFee;
-
-      if (
-        BigInt(accumulatedTokenAmount) < BigInt(requiredTokenAmount) ||
-        BigInt(accumulatedAda) < adaTarget
-      ) {
-        throw {
-          code: "INSUFFICIENT_BALANCE",
-          message: "Insufficient balance for token or ADA.",
-          details: {
-            requiredTokenAmount,
-            accumulatedTokenAmount,
-            requiredAda: Number(adaTarget),
-            accumulatedAda,
-          },
-        };
-      }
-
-      const convertedUtxos: lucid.UTxO[] = selectedUtxos.map((utxo) => {
-        const assets: Record<string, bigint> = {};
-        utxo.amount.forEach(({ unit, quantity }) => {
-          assets[unit] = BigInt(quantity);
-        });
-        return {
-          txHash: utxo.tx_hash,
-          outputIndex: utxo.output_index,
-          address: utxo.address,
-          assets,
-        };
       });
 
-      const assetNameUnit =
-        tokenPolicyId + lucid.toHex(Buffer.from(nightTokenName, "utf8"));
+      const witnessHex = await this.signTransferTransaction(unsignedTx);
 
-      const dummyWallet: lucid.WalletApi = {
-        getNetworkId: async () => 1, // or 0 for testnet
-        getUtxos: async () => [],
-        getBalance: async () => "0",
-        getUsedAddresses: async () => [
-          Buffer.from(
-            lucid.C.Address.from_bech32(this.address).to_bytes()
-          ).toString("hex"),
-        ],
-        getUnusedAddresses: async () => [],
-        getChangeAddress: async () =>
-          Buffer.from(
-            lucid.C.Address.from_bech32(this.address).to_bytes()
-          ).toString("hex"),
-        getRewardAddresses: async () => [],
-        signTx: async () => {
-          throw new Error("signTx not implemented in dummy wallet");
-        },
-        signData: async () => {
-          throw new Error("signData not implemented in dummy wallet");
-        },
-        submitTx: async () => {
-          throw new Error("submitTx not implemented in dummy wallet");
-        },
-        getCollateral: async () => [],
-        experimental: {
-          getCollateral: async () => [],
-          on: () => {},
-          off: () => {},
-        },
-      };
-      this.lucid.selectWallet(dummyWallet);
-      let tx = this.lucid
-        .newTx()
-        .collectFrom(convertedUtxos)
-        .payToAddress(recipientAddress, {
-          lovelace: BigInt(minRecipientLovelace),
-          [assetNameUnit]: BigInt(requiredTokenAmount),
-        })
-        .payToAddress(this.address, {
-          lovelace: BigInt(accumulatedAda) - adaTarget,
-          [assetNameUnit]:
-            BigInt(accumulatedTokenAmount) - BigInt(requiredTokenAmount),
-        });
-
-      const ttl = await calculateTtl(blockfrost, this.lucid, 2600);
-      tx = tx.validTo(ttl);
-
-      const unsignedTx = await tx.complete();
-
-      const txHash = unsignedTx.toHash();
-
-      const transactionPayload = {
-        assetId: this.assetId,
-        operation: TransactionOperation.Raw,
-        source: {
-          type: TransferPeerPathType.VaultAccount,
-          id: this.vaultAccountId,
-        },
-        note: "transfer ADA native tokens",
-        extraParameters: {
-          rawMessageData: {
-            messages: [
-              {
-                content: txHash,
-              },
-            ],
-          },
-        },
-      };
-
-      const fbResponse = await this.fireblocksService.broadcastTransaction(
-        transactionPayload
+      const txHash = await this.assembleAndSubmitTransaction(
+        unsignedTx,
+        witnessHex
       );
-      if (
-        !fbResponse?.publicKey ||
-        !fbResponse?.signature ||
-        !fbResponse.signature.fullSig
-      ) {
-        throw new Error("Missing publicKey or signature from Fireblocks");
-      }
 
-      const publicKeyBytes = Buffer.from(fbResponse.publicKey, "hex");
-      const signatureBytes = Buffer.from(fbResponse.signature.fullSig, "hex");
-      const publicKey = lucid.C.PublicKey.from_bytes(publicKeyBytes);
-
-      const vkey = lucid.C.Vkey.new(publicKey);
-
-      const signature = lucid.C.Ed25519Signature.from_bytes(signatureBytes);
-      const vkeyWitness = lucid.C.Vkeywitness.new(vkey, signature);
-      const vkeyWitnesses = lucid.C.Vkeywitnesses.new();
-      vkeyWitnesses.add(vkeyWitness);
-      const witnessSet = lucid.C.TransactionWitnessSet.new();
-      witnessSet.set_vkeys(vkeyWitnesses);
-
-      const witnessHex = Buffer.from(witnessSet.to_bytes()).toString("hex");
-
-      const signedTxComplete = unsignedTx.assemble([witnessHex]);
-
-      const signedTx = await signedTxComplete.complete();
-
-      const txHexString = signedTx.toString();
-      const submittedHash = await this.lucid.provider.submitTx(txHexString);
       return {
-        txHash: submittedHash,
+        txHash,
         senderAddress: this.address,
         tokenName: this.assetId,
       };
     } catch (error: any) {
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("transferClaims error:", error.message);
       throw new Error(
         `Error in transferClaims: ${
           error instanceof Error ? error.message : JSON.stringify(error)
@@ -477,6 +369,253 @@ export class FireblocksMidnightSDK {
     }
   };
 
+  private validateBlockfrostConfig(): void {
+    if (!this.blockfrostProjectId) {
+      throw new Error("BLOCKFROST_PROJECT_ID is not configured");
+    }
+  }
+
+  private async fetchAndValidateUtxos(
+    tokenPolicyId: string,
+    requiredTokenAmount: number,
+    minRecipientLovelace: number,
+    minChangeLovelace: number
+  ): Promise<{
+    blockfrost: BlockFrostAPI;
+    utxos: any[];
+    accumulatedAda: number;
+    accumulatedTokenAmount: number;
+  }> {
+    const transactionFee = BigInt(tokenTransactionFee);
+
+    const utxoResult = await fetchAndSelectUtxos(
+      this.address,
+      this.blockfrostProjectId!,
+      tokenPolicyId,
+      requiredTokenAmount,
+      Number(transactionFee),
+      minRecipientLovelace,
+      minChangeLovelace
+    );
+
+    if (!utxoResult) {
+      throw new Error("No UTXOs found");
+    }
+
+    const {
+      selectedUtxos,
+      accumulatedAda,
+      accumulatedTokenAmount,
+      blockfrost,
+    } = utxoResult;
+
+    this.validateSufficientBalance(
+      accumulatedAda,
+      accumulatedTokenAmount,
+      requiredTokenAmount,
+      minRecipientLovelace,
+      Number(transactionFee)
+    );
+
+    return {
+      utxos: selectedUtxos,
+      accumulatedAda,
+      accumulatedTokenAmount,
+      blockfrost,
+    };
+  }
+
+  private validateSufficientBalance(
+    accumulatedAda: number,
+    accumulatedTokenAmount: number,
+    requiredTokenAmount: number,
+    minRecipientLovelace: number,
+    transactionFee: number
+  ): void {
+    const adaTarget = BigInt(minRecipientLovelace) + BigInt(transactionFee);
+
+    if (
+      BigInt(accumulatedTokenAmount) < BigInt(requiredTokenAmount) ||
+      BigInt(accumulatedAda) < adaTarget
+    ) {
+      throw {
+        code: "INSUFFICIENT_BALANCE",
+        message: "Insufficient balance for token or ADA",
+        details: {
+          requiredTokenAmount,
+          accumulatedTokenAmount,
+          requiredAda: Number(adaTarget),
+          accumulatedAda,
+        },
+      };
+    }
+  }
+
+  private convertUtxosForLucid(utxos: any[]): lucid.UTxO[] {
+    return utxos.map((utxo) => {
+      const assets: Record<string, bigint> = {};
+      utxo.amount.forEach(({ unit, quantity }: any) => {
+        assets[unit] = BigInt(quantity);
+      });
+      return {
+        txHash: utxo.tx_hash,
+        outputIndex: utxo.output_index,
+        address: utxo.address,
+        assets,
+      };
+    });
+  }
+
+  private createDummyWallet(address: string): lucid.WalletApi {
+    const addressHex = Buffer.from(
+      lucid.C.Address.from_bech32(address).to_bytes()
+    ).toString("hex");
+
+    return {
+      getNetworkId: async () => 1,
+      getUtxos: async () => [],
+      getBalance: async () => "0",
+      getUsedAddresses: async () => [addressHex],
+      getUnusedAddresses: async () => [],
+      getChangeAddress: async () => addressHex,
+      getRewardAddresses: async () => [],
+      signTx: async () => {
+        throw new Error("signTx not implemented in dummy wallet");
+      },
+      signData: async () => {
+        throw new Error("signData not implemented in dummy wallet");
+      },
+      submitTx: async () => {
+        throw new Error("submitTx not implemented in dummy wallet");
+      },
+      getCollateral: async () => [],
+      experimental: {
+        getCollateral: async () => [],
+        on: () => {},
+        off: () => {},
+      },
+    };
+  }
+
+  private async buildTransferTransaction(params: {
+    blockfrost: BlockFrostAPI;
+    convertedUtxos: lucid.UTxO[];
+    recipientAddress: string;
+    tokenPolicyId: string;
+    requiredTokenAmount: number;
+    minRecipientLovelace: number;
+    accumulatedAda: number;
+    accumulatedTokenAmount: number;
+  }): Promise<lucid.TxComplete> {
+    const {
+      blockfrost,
+      convertedUtxos,
+      recipientAddress,
+      tokenPolicyId,
+      requiredTokenAmount,
+      minRecipientLovelace,
+      accumulatedAda,
+      accumulatedTokenAmount,
+    } = params;
+
+    const transactionFee = BigInt(tokenTransactionFee);
+    const adaTarget = BigInt(minRecipientLovelace) + transactionFee;
+
+    const assetNameUnit =
+      tokenPolicyId + lucid.toHex(Buffer.from(nightTokenName, "utf8"));
+
+    // Set dummy wallet
+    const dummyWallet = this.createDummyWallet(this.address);
+    this.lucid!.selectWallet(dummyWallet);
+
+    // Build transaction
+    let tx = this.lucid!.newTx()
+      .collectFrom(convertedUtxos)
+      .payToAddress(recipientAddress, {
+        lovelace: BigInt(minRecipientLovelace),
+        [assetNameUnit]: BigInt(requiredTokenAmount),
+      })
+      .payToAddress(this.address, {
+        lovelace: BigInt(accumulatedAda) - adaTarget,
+        [assetNameUnit]:
+          BigInt(accumulatedTokenAmount) - BigInt(requiredTokenAmount),
+      });
+
+    const ttl = await calculateTtl(blockfrost, this.lucid!, 2600);
+    tx = tx.validTo(ttl);
+
+    return await tx.complete();
+  }
+
+  private async signTransferTransaction(
+    unsignedTx: lucid.TxComplete
+  ): Promise<string> {
+    const txHash = unsignedTx.toHash();
+
+    const transactionPayload = {
+      assetId: this.assetId,
+      operation: TransactionOperation.Raw,
+      source: {
+        type: TransferPeerPathType.VaultAccount,
+        id: this.vaultAccountId,
+      },
+      note: "Transfer ADA native tokens",
+      extraParameters: {
+        rawMessageData: {
+          messages: [{ content: txHash }],
+        },
+      },
+    };
+
+    const fbResponse = await this.fireblocksService.broadcastTransaction(
+      transactionPayload
+    );
+
+    if (
+      !fbResponse?.publicKey ||
+      !fbResponse?.signature ||
+      !fbResponse.signature.fullSig
+    ) {
+      throw new Error("Missing publicKey or signature from Fireblocks");
+    }
+
+    return this.createTransferWitnessSet(
+      fbResponse.publicKey,
+      fbResponse.signature.fullSig
+    );
+  }
+
+  private createTransferWitnessSet(
+    publicKeyHex: string,
+    signatureHex: string
+  ): string {
+    const publicKeyBytes = Buffer.from(publicKeyHex, "hex");
+    const signatureBytes = Buffer.from(signatureHex, "hex");
+
+    const publicKey = lucid.C.PublicKey.from_bytes(publicKeyBytes);
+    const vkey = lucid.C.Vkey.new(publicKey);
+    const signature = lucid.C.Ed25519Signature.from_bytes(signatureBytes);
+    const vkeyWitness = lucid.C.Vkeywitness.new(vkey, signature);
+
+    const vkeyWitnesses = lucid.C.Vkeywitnesses.new();
+    vkeyWitnesses.add(vkeyWitness);
+
+    const witnessSet = lucid.C.TransactionWitnessSet.new();
+    witnessSet.set_vkeys(vkeyWitnesses);
+
+    return Buffer.from(witnessSet.to_bytes()).toString("hex");
+  }
+
+  private async assembleAndSubmitTransaction(
+    unsignedTx: lucid.TxComplete,
+    witnessHex: string
+  ): Promise<string> {
+    const signedTxComplete = unsignedTx.assemble([witnessHex]);
+    const signedTx = await signedTxComplete.complete();
+    const txHexString = signedTx.toString();
+
+    return await this.lucid!.provider.submitTx(txHexString);
+  }
   /**
    * Retrieves the wallet addresses associated with a specific Fireblocks vault account.
    *
@@ -487,16 +626,742 @@ export class FireblocksMidnightSDK {
   public getVaultAccountAddresses = async ({
     vaultAccountId,
   }: getVaultAccountAddressesOpts): Promise<VaultWalletAddress[]> => {
+    return await this.fireblocksService.getVaultAccountAddresses(
+      vaultAccountId,
+      this.assetId
+    );
+  };
+
+  public registerScavengerHuntAddress = async ({
+    vaultAccountId,
+    index,
+  }: registerScavengerHuntAddressOpts): Promise<RegistrationReceipt> => {
     try {
-      return await this.fireblocksService.getVaultAccountAddresses(
+      const adaWallet = await this.fireblocksService.getVaultAccountAddress(
         vaultAccountId,
-        this.assetId
+        SupportedAssetIds.ADA,
+        index
       );
+
+      const adaAddress = adaWallet.address;
+
+      if (!adaAddress) {
+        throw new Error(
+          `Invalid ADA address found for vault account ${vaultAccountId}`
+        );
+      }
+
+      const termsResponse = await fetch(
+        "https://scavenger.prod.gd.midnighttge.io/TandC"
+      );
+      const terms = await termsResponse.json();
+      const messageToSign = terms.message;
+      const signedMessageResponse = await this.fireblocksService.signMessage({
+        chain: SupportedBlockchains.CARDANO,
+        originVaultAccountId: vaultAccountId,
+        destinationAddress: adaAddress,
+        amount: 0,
+        message: messageToSign,
+        noteType: NoteType.REGISTER,
+      });
+
+      if (
+        !signedMessageResponse ||
+        !signedMessageResponse.content ||
+        !signedMessageResponse.publicKey ||
+        !signedMessageResponse.signature ||
+        !signedMessageResponse.signature.fullSig
+      ) {
+        throw new Error(
+          "Invalid Fireblocks response: missing signature or public key"
+        );
+      }
+
+      const fullSig = signedMessageResponse.signature.fullSig;
+      const publicKey = signedMessageResponse.publicKey;
+
+      const coseSign1Hex = await buildCoseSign1(messageToSign, fullSig!);
+
+      const result = await this.scavengerHuntService.register({
+        destinationAddress: adaAddress,
+        signature: coseSign1Hex,
+        pubkey: publicKey,
+      });
+
+      this.logger.saveData("registered-addresses", {
+        vaultAccountId: vaultAccountId,
+        address: adaAddress,
+        publicKey: publicKey,
+        timestamp: result.timestamp,
+        preimage: result.preimage,
+        signature: result.signature,
+      });
+
+      return result;
     } catch (error: any) {
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("registerScavengerHuntAddress error:", error.message);
       throw new Error(
-        `Error in getVaultAccountAddresses:
-        ${error instanceof Error ? error.message : error}`
+        `Error in registerScavengerHuntAddress: ${
+          error instanceof Error ? error.message : error
+        }`
       );
     }
+  };
+
+  public solveScavengerHuntChallenge = async ({
+    vaultAccountId,
+    index,
+  }: solveScavengerHuntChallengeOpts): Promise<{
+    nonce: string;
+    hash: string;
+    attempts: bigint;
+    timeMs: number;
+  }> => {
+    try {
+      const adaWallet = await this.fireblocksService.getVaultAccountAddress(
+        vaultAccountId,
+        SupportedAssetIds.ADA,
+        index
+      );
+
+      const adaAddress = adaWallet.address;
+
+      if (!adaAddress) {
+        throw new Error(
+          `Invalid ADA address found for vault account ${vaultAccountId}`
+        );
+      }
+
+      const challengeResonse = await this.scavengerHuntService.getChallenge();
+
+      const challenge = challengeResonse.challenge;
+
+      const result = await this.scavengerHuntService.solveChallenge({
+        address: adaAddress,
+        challenge,
+      });
+
+      this.logger.appendData("mining-history", {
+        challengeId: challenge.challenge_id,
+        nonce: result.nonce,
+        attempts: Number(result.attempts),
+        timeMs: result.timeMs,
+        hashRate: Number(result.nonce) / (result.timeMs / 1000),
+        adaAddress,
+      });
+
+      return result;
+    } catch (error: any) {
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("solveScavengerHuntChallenge error:", error.message);
+      throw new Error(
+        `Error in solveScavengerHuntChallenge: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
+  };
+
+  public donateToScavengerHunt = async ({
+    vaultAccountId,
+    index,
+    destAddress,
+  }: donateToScavengerHuntOpts): Promise<DonateToScavengerHuntResponse> => {
+    try {
+      const adaWallet = await this.fireblocksService.getVaultAccountAddress(
+        vaultAccountId,
+        SupportedAssetIds.ADA,
+        index
+      );
+
+      const adaAddress = adaWallet.address;
+
+      if (!adaAddress) {
+        throw new Error(
+          `Invalid ADA address found for vault account ${vaultAccountId}`
+        );
+      }
+      const messageToSign = `Assign accumulated Scavenger rights to: ${destAddress}`;
+
+      const signedMessageResponse = await this.fireblocksService.signMessage({
+        chain: SupportedBlockchains.CARDANO,
+        originVaultAccountId: vaultAccountId,
+        destinationAddress: adaAddress,
+        amount: 0,
+        message: messageToSign,
+        noteType: NoteType.DONATE,
+      });
+
+      if (
+        !signedMessageResponse ||
+        !signedMessageResponse.content ||
+        !signedMessageResponse.signature ||
+        !signedMessageResponse.signature.fullSig
+      ) {
+        throw new Error(
+          "Invalid Fireblocks response: missing signature or public key"
+        );
+      }
+
+      const fullSig = signedMessageResponse.signature.fullSig;
+
+      const signature = await buildCoseSign1(messageToSign, fullSig!);
+
+      const result = await this.scavengerHuntService.donateToAddress({
+        destinationAddress: destAddress,
+        originalAddress: adaAddress,
+        signature,
+      });
+
+      this.logger.appendData("donation-history", result);
+
+      return result;
+    } catch (error: any) {
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("donateToScavengerHunt error:", error.message);
+      throw new Error(
+        `Error in donateToScavengerHunt: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
+  };
+
+  public getScavengerHuntChallenge =
+    async (): Promise<ScavangerHuntChallangeResponse> => {
+      return await this.scavengerHuntService.getChallenge();
+    };
+
+  public getPhaseConfig = async (): Promise<PhaseConfigResponse> => {
+    return await this.thawsService.getPhaseConfig();
+  };
+
+  public getThawSchedule = async (params: {
+    vaultAccountId: string;
+    index: number;
+  }): Promise<ThawScheduleResponse> => {
+    const { vaultAccountId, index } = params;
+    const adaWallet = await this.fireblocksService.getVaultAccountAddress(
+      vaultAccountId,
+      SupportedAssetIds.ADA,
+      index
+    );
+
+    const adaAddress = adaWallet.address;
+
+    if (!adaAddress) {
+      throw new Error(
+        `Invalid ADA address found for vault account ${vaultAccountId}`
+      );
+    }
+
+    return await this.thawsService.getThawSchedule(adaAddress);
+  };
+
+  public getThawTransactionStatus = async (params: {
+    destAddress: string;
+    transactionId: string;
+  }): Promise<ThawTransactionStatus> => {
+    const { destAddress, transactionId } = params;
+    return await this.thawsService.getTransactionStatus(
+      destAddress,
+      transactionId
+    );
+  };
+
+  public redeemNight = async (params: {
+    vaultAccountId: string;
+    index: number;
+    waitForConfirmation?: boolean;
+    pollingIntervalMs?: number;
+    timeoutMs?: number;
+  }): Promise<ThawTransactionResponse & { finalStatus?: string }> => {
+    try {
+      const { vaultAccountId, index } = params;
+
+      if (!this.blockfrostProjectId) {
+        throw new Error("Blockfrost project ID is required for redemption");
+      }
+
+      const addresses = await this.fireblocksService.getVaultAccountAddresses(
+        vaultAccountId,
+        SupportedAssetIds.ADA
+      );
+
+      const destAddress = addresses.filter(
+        (addr) => addr.bip44AddressIndex === params.index
+      )[0]?.address;
+
+      if (!destAddress) {
+        throw new Error(
+          `Invalid ADA address found for vault account ${vaultAccountId}`
+        );
+      }
+
+      this.logger.info(`Using address at index ${index}: ${destAddress}`);
+
+      await this.validateRedemptionWindow();
+
+      const schedule = await this.validateRedeemableThaws(destAddress);
+      const redeemableCount = schedule.thaws.filter(
+        (t) => t.status === ThawStatusSchedule.REDEEMABLE
+      ).length;
+
+      this.logger.info(
+        `Found ${redeemableCount} redeemable thaw(s) for address ${destAddress}`
+      );
+
+      const utxoHex = await this.fetchAndConvertUtxo(destAddress);
+      const txBuildResponse = await this.buildRedemptionTransaction(
+        destAddress,
+        utxoHex
+      );
+
+      this.logger.info(
+        `Transaction will redeem ${txBuildResponse.redeemed_amount} NIGHT tokens`
+      );
+
+      const witnessSetHex = await this.signRedemptionTransaction(
+        vaultAccountId,
+        txBuildResponse.transaction_id,
+        index
+      );
+
+      const submitResponse = await this.submitRedemptionTransaction(
+        destAddress,
+        txBuildResponse,
+        witnessSetHex
+      );
+
+      this.logRedemption(destAddress, submitResponse);
+
+      if (params.waitForConfirmation) {
+        this.logger.info(
+          `Waiting for transaction confirmation (timeout: ${
+            params.timeoutMs || 300000
+          }ms)...`
+        );
+
+        const finalStatus = await this.waitForConfirmation(
+          destAddress,
+          submitResponse.transaction_id,
+          params.timeoutMs || 300000,
+          params.pollingIntervalMs || 15000
+        );
+
+        return {
+          ...submitResponse,
+          finalStatus,
+        };
+      }
+
+      return submitResponse;
+    } catch (error: any) {
+      if (error instanceof MidnightApiError) {
+        throw error;
+      }
+
+      this.logger.error("redeemNight error:", error.message);
+      throw new Error(
+        `Error in redeemNight: ${
+          error instanceof Error ? error.message : JSON.stringify(error)
+        }`
+      );
+    }
+  };
+
+  private waitForConfirmation = async (
+    destAddress: string,
+    transactionId: string,
+    timeoutMs: number,
+    intervalMs: number
+  ): Promise<string> => {
+    const startTime = Date.now();
+    let lastStatus: string = "unknown";
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const status = await this.thawsService.getTransactionStatus(
+          destAddress,
+          transactionId
+        );
+
+        lastStatus = status.status;
+
+        this.logger.info(
+          `Transaction ${transactionId} status: ${status.status} (${status.redeemed_amount} NIGHT)`
+        );
+
+        if (status.status === "confirmed") {
+          this.logger.info(
+            `Transaction ${transactionId} confirmed! Redeemed: ${status.redeemed_amount} NIGHT`
+          );
+          return status.status;
+        }
+
+        if (status.status === "failed") {
+          throw new Error(
+            `Transaction ${transactionId} failed during confirmation`
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      } catch (error: any) {
+        if (error instanceof MidnightApiError) {
+          throw error;
+        }
+
+        this.logger.warn(
+          `Error checking status (will retry): ${error.message}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+    }
+
+    throw new Error(
+      `Transaction confirmation timeout after ${timeoutMs}ms. Last status: ${lastStatus}`
+    );
+  };
+
+  private validateRedeemableThaws = async (
+    destAddress: string
+  ): Promise<ThawScheduleResponse> => {
+    const addressSchedule = await this.thawsService.getThawSchedule(
+      destAddress
+    );
+
+    const redeemableThaws = addressSchedule.thaws.filter(
+      (t) => t.status === ThawStatusSchedule.REDEEMABLE
+    );
+
+    if (redeemableThaws.length === 0) {
+      throw new Error(
+        `No redeemable thaws available for address: ${destAddress}`
+      );
+    }
+
+    return addressSchedule;
+  };
+
+  private signRedemptionTransaction = async (
+    vaultAccountId: string,
+    transactionId: string,
+    addressIndex: number = 0
+  ): Promise<string> => {
+    const transactionPayload = {
+      assetId: SupportedAssetIds.ADA,
+      operation: TransactionOperation.Raw,
+      source: {
+        type: TransferPeerPathType.VaultAccount,
+        id: vaultAccountId,
+        addressIndex: addressIndex,
+      },
+      note: `Redeem NIGHT tokens from address index ${addressIndex}`,
+      extraParameters: {
+        rawMessageData: {
+          messages: [{ content: transactionId }],
+        },
+      },
+    };
+
+    const fbResponse = await this.fireblocksService.broadcastTransaction(
+      transactionPayload
+    );
+
+    if (!fbResponse?.signature || !fbResponse.signature.fullSig) {
+      throw new Error("Missing signature from Fireblocks");
+    }
+
+    if (!fbResponse.publicKey) {
+      throw new Error("Missing public key from Fireblocks");
+    }
+
+    return this.createWitnessSet(
+      fbResponse.publicKey,
+      fbResponse.signature.fullSig
+    );
+  };
+
+  private validateRedemptionWindow = async (): Promise<void> => {
+    try {
+      const config = await this.thawsService.getPhaseConfig();
+      const windowInfo = this.thawsService.getRedemptionWindowTimes(config);
+
+      if (!windowInfo.isOpen) {
+        throw new Error(
+          `Redemption window is not open. Window: ${windowInfo.startTime.toISOString()} - ${windowInfo.endTime.toISOString()}`
+        );
+      }
+    } catch (error: any) {
+      this.logger.error(
+        `Redemption window validation failed: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+      throw error;
+    }
+  };
+
+  private selectLargestUtxo = (utxos: lucid.UTxO[]): lucid.UTxO => {
+    return utxos.sort((a, b) => {
+      const aLovelace = a.assets.lovelace || 0n;
+      const bLovelace = b.assets.lovelace || 0n;
+      return Number(bLovelace - aLovelace);
+    })[0];
+  };
+
+  private convertUtxoToHex = (
+    utxo: lucid.UTxO,
+    destAddress: string
+  ): string => {
+    const txHash = lucid.C.TransactionHash.from_hex(utxo.txHash);
+    const txIn = lucid.C.TransactionInput.new(
+      txHash,
+      lucid.C.BigNum.from_str(utxo.outputIndex.toString())
+    );
+    const address = lucid.C.Address.from_bech32(destAddress);
+    const lovelaceAmount = utxo.assets.lovelace || 0n;
+    const amount = lucid.C.Value.new(
+      lucid.C.BigNum.from_str(lovelaceAmount.toString())
+    );
+    const txOut = lucid.C.TransactionOutput.new(address, amount);
+
+    const txUnspentOutput = lucid.C.TransactionUnspentOutput.new(txIn, txOut);
+    return Buffer.from(txUnspentOutput.to_bytes()).toString("hex");
+  };
+
+  private buildRedemptionTransaction = async (
+    destAddress: string,
+    utxoHex: string
+  ): Promise<TransactionBuildResponse> => {
+    const buildRequest: TransactionBuildRequest = {
+      change_address: destAddress,
+      funding_utxos: [utxoHex],
+      collateral_utxos: await this.getCollateralUtxos(destAddress),
+    };
+
+    const txBuildResponse = await this.thawsService.buildThawTransaction(
+      destAddress,
+      buildRequest
+    );
+
+    if (txBuildResponse.require_thawing_extra_signature) {
+      this.logger.warn(
+        `Transaction ${txBuildResponse.transaction_id} requires additional thawing signature`
+      );
+      throw new Error(
+        "Additional thawing signature required but not implemented. This transaction cannot be completed."
+      );
+    }
+
+    this.logger.info(
+      `Built thaw transaction: ${txBuildResponse.transaction_id}, redeemed amount: ${txBuildResponse.redeemed_amount}`
+    );
+
+    return txBuildResponse;
+  };
+
+  /**
+   * Fetches and prepares collateral UTXOs for transaction building
+   * Collateral is required for smart contract transactions in Cardano
+   */
+  private getCollateralUtxos = async (
+    destAddress: string
+  ): Promise<string[]> => {
+    try {
+      if (!this.lucid) {
+        await this.initializeLucid();
+      }
+
+      const utxos = await this.lucid!.utxosAt(destAddress);
+
+      if (!utxos || utxos.length === 0) {
+        this.logger.warn(
+          `No UTXOs available for collateral at address: ${destAddress}`
+        );
+        return [];
+      }
+
+      // Filter UTXOs suitable for collateral:
+      // - Should contain only ADA (no native tokens)
+      // - Should have at least 5 ADA (5,000,000 lovelace)
+      const MIN_COLLATERAL_LOVELACE = 5_000_000n;
+
+      const collateralCandidates = utxos.filter((utxo) => {
+        const hasOnlyAda =
+          Object.keys(utxo.assets).length === 1 &&
+          utxo.assets.lovelace !== undefined;
+        const hasEnoughAda =
+          (utxo.assets.lovelace || 0n) >= MIN_COLLATERAL_LOVELACE;
+        return hasOnlyAda && hasEnoughAda;
+      });
+
+      if (collateralCandidates.length === 0) {
+        this.logger.warn(
+          `No suitable collateral UTXOs found (need pure ADA UTXO with at least 5 ADA)`
+        );
+        return [];
+      }
+
+      // Select up to 3 collateral UTXOs (Cardano limit)
+      const selectedCollateral = collateralCandidates
+        .slice(0, 3)
+        .map((utxo) => this.convertUtxoToHex(utxo, destAddress));
+
+      this.logger.info(
+        `Selected ${selectedCollateral.length} collateral UTXO(s)`
+      );
+
+      return selectedCollateral;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to get collateral UTXOs: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+      // Return empty array and let the API decide if it's needed
+      return [];
+    }
+  };
+
+  /**
+   * Fetches and converts the largest UTXO for funding the redemption transaction
+   * Ensures we don't use UTXOs that might be needed for collateral
+   */
+  private fetchAndConvertUtxo = async (
+    destAddress: string
+  ): Promise<string> => {
+    if (!this.lucid) {
+      await this.initializeLucid();
+    }
+
+    const utxos = await this.lucid!.utxosAt(destAddress);
+
+    if (!utxos || utxos.length === 0) {
+      throw new Error(`No UTXOs found for address: ${destAddress}`);
+    }
+
+    // Filter out UTXOs that might be used as collateral
+    const COLLATERAL_EXACT = 5_000_000n;
+
+    const fundingCandidates = utxos.filter((utxo) => {
+      const isExactCollateralAmount = utxo.assets.lovelace === COLLATERAL_EXACT;
+      const hasOnlyAda = Object.keys(utxo.assets).length === 1;
+
+      // Exclude UTXOs that look like dedicated collateral
+      return !(isExactCollateralAmount && hasOnlyAda);
+    });
+
+    if (fundingCandidates.length === 0) {
+      this.logger.warn(
+        "No suitable funding UTXOs found, using all UTXOs including potential collateral"
+      );
+      // Fall back to using any UTXO
+      const selectedUtxo = this.selectLargestUtxo(utxos);
+      return this.convertUtxoToHex(selectedUtxo, destAddress);
+    }
+
+    const selectedUtxo = this.selectLargestUtxo(fundingCandidates);
+
+    this.logger.info(
+      `Selected funding UTXO with ${selectedUtxo.assets.lovelace} lovelace`
+    );
+
+    return this.convertUtxoToHex(selectedUtxo, destAddress);
+  };
+
+  private createWitnessSet = (
+    publicKeyHex: string,
+    signatureHex: string
+  ): string => {
+    const publicKeyBytes = Buffer.from(publicKeyHex, "hex");
+    const signatureBytes = Buffer.from(signatureHex, "hex");
+
+    const publicKey = lucid.C.PublicKey.from_bytes(publicKeyBytes);
+    const vkey = lucid.C.Vkey.new(publicKey);
+    const signature = lucid.C.Ed25519Signature.from_bytes(signatureBytes);
+    const vkeyWitness = lucid.C.Vkeywitness.new(vkey, signature);
+
+    const vkeyWitnesses = lucid.C.Vkeywitnesses.new();
+    vkeyWitnesses.add(vkeyWitness);
+
+    const witnessSet = lucid.C.TransactionWitnessSet.new();
+    witnessSet.set_vkeys(vkeyWitnesses);
+
+    return Buffer.from(witnessSet.to_bytes()).toString("hex");
+  };
+
+  private submitRedemptionTransaction = async (
+    destAddress: string,
+    txBuildResponse: TransactionBuildResponse,
+    witnessSetHex: string
+  ): Promise<ThawTransactionResponse> => {
+    try {
+      const submitRequest: TransactionSubmissionRequest = {
+        transaction: txBuildResponse.transaction,
+        transaction_witness_set: witnessSetHex,
+      };
+
+      const submitResponse = await this.thawsService.submitThawTransaction(
+        destAddress,
+        submitRequest
+      );
+
+      this.logger.info(
+        `Submitted thaw transaction: ${submitResponse.transaction_id}`
+      );
+
+      return submitResponse;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to submit redemption transaction: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+      throw new Error(
+        `Failed to submit redemption transaction: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
+  };
+
+  private logRedemption = (
+    destAddress: string,
+    submitResponse: ThawTransactionResponse
+  ): void => {
+    this.logger.appendData("redemption-history", {
+      destAddress,
+      transactionId: submitResponse.transaction_id,
+      estimatedSubmissionTime: new Date(
+        submitResponse.estimated_submission_time * 1000
+      ).toISOString(),
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  private initializeLucid = async (): Promise<void> => {
+    if (!this.blockfrostProjectId) {
+      throw new Error("Blockfrost project id was not provided.");
+    }
+    const network = this.blockfrostProjectId.includes("mainnet")
+      ? "Mainnet"
+      : this.blockfrostProjectId.includes("preprod")
+      ? "Preprod"
+      : "Preview";
+    this.lucid = await lucid.Lucid.new(
+      new lucid.Blockfrost(this.blockfrostProjectId, this.blockfrostProjectId),
+      network
+    );
   };
 }
