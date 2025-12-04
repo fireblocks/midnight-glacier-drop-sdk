@@ -11,12 +11,15 @@ import {
   generateTransactionPayload,
   getTxStatus,
 } from "../utils/fireblocks.utils.js";
-
 import { nightDecimals, termsAndConditionsHash } from "../constants.js";
-import { SupportedAssetIds, SupportedBlockchains } from "../types.js";
+import {
+  NoteType,
+  SignMessageParams,
+  SupportedAssetIds,
+} from "../types/index.js";
+
 import { getAssetIdsByBlockchain } from "../utils/general.js";
 import { Logger } from "../utils/logger.js";
-
 
 /**
  * Service class for interacting with the Fireblocks SDK.
@@ -338,14 +341,24 @@ export class FireblocksService {
 
         default: {
           const assetId = getAssetIdsByBlockchain(chain);
-          const displayAmount = (amount / Math.pow(10, 6)).toFixed(6);
+          // Format the amount for display (convert from smallest unit)
+          const displayAmount = (amount / Math.pow(10, nightDecimals)).toFixed(
+            nightDecimals
+          );
 
-      // Format the amount for display (convert from smallest unit)
-      const displayAmount = (amount / Math.pow(10, nightDecimals)).toFixed(nightDecimals);
-      const note =
-        vaultName && originAddress
-          ? `Claiming ${displayAmount} NIGHT for ${assetId} from ${originAddress} in Vault ${vaultName} to address ${destinationAddress}`
-          : `Claiming ${displayAmount} NIGHT for ${assetId} to address ${destinationAddress}`;
+          if (vaultName && originAddress) {
+            note = `Claiming ${displayAmount} NIGHT for ${
+              assetId || chain
+            } from ${originAddress} in Vault ${vaultName} to address ${destinationAddress}`;
+          } else {
+            note = `Claiming ${displayAmount} NIGHT for ${
+              assetId || chain
+            } to address ${destinationAddress}`;
+          }
+          break;
+        }
+      }
+
       const transactionPayload = await generateTransactionPayload(
         payload,
         chain,
