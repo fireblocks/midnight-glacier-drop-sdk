@@ -6,6 +6,7 @@ import {
   TransferClaimsResponse,
 } from "../../types/index.js";
 import { FbNightApiService } from "../apiService.js";
+import { nightPolicyId } from "../../constants.js";
 import { Logger } from "../../utils/logger.js";
 
 /**
@@ -180,12 +181,16 @@ export class ApiController {
    */
   public transferClaims = async (req: Request, res: Response) => {
     try {
-      const {
-        vaultAccountId,
-        recipientAddress,
-        tokenPolicyId,
-        requiredTokenAmount,
-      } = req.body;
+      const { vaultAccountId, recipientAddress, requiredTokenAmount } =
+        req.body;
+      const tokenPolicyId = nightPolicyId;
+      console.log(
+        `Transferring claims from vault ${vaultAccountId} to ${recipientAddress} with policy ${tokenPolicyId} and amount ${requiredTokenAmount}`
+      );
+
+      const amountInSmallestUnit = Math.floor(
+        Number(requiredTokenAmount) * 1_000_000
+      );
 
       const { txHash, senderAddress, tokenName } =
         (await this.api.executeTransaction({
@@ -195,7 +200,7 @@ export class ApiController {
           params: {
             recipientAddress,
             tokenPolicyId,
-            requiredTokenAmount: Number(requiredTokenAmount),
+            requiredTokenAmount: amountInSmallestUnit,
           },
         })) as TransferClaimsResponse;
 

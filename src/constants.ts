@@ -12,6 +12,11 @@ export const redemptionPhaseBaseUrl =
 export const termsAndConditionsHash =
   "31a6bab50a84b8439adcfb786bb2020f6807e6e8fda629b424110fc7bb1c6b8b";
 
+export const nightPolicyId =
+  "0691b2fecca1ac4f53cb6dfb00b7013e561d1f34403b957cbb5af1fa";
+  
 export const nightTokenName = "NIGHT";
+
+export const nightDecimals = 6;
 
 export const tokenTransactionFee = 200000;
