@@ -11,7 +11,7 @@ import {
   generateTransactionPayload,
   getTxStatus,
 } from "../utils/fireblocks.utils.js";
-import { termsAndConditionsHash } from "../constants.js";
+import { nightDecimals, termsAndConditionsHash } from "../constants.js";
 import { SupportedAssetIds, SupportedBlockchains } from "../types.js";
 
 /**
@@ -105,7 +105,7 @@ export class FireblocksService {
       console.log("signMessage payload", payload);
 
       // Format the amount for display (convert from smallest unit)
-      const displayAmount = (amount / Math.pow(10, 6)).toFixed(6);
+      const displayAmount = (amount / Math.pow(10, nightDecimals)).toFixed(nightDecimals);
       const note =
         vaultName && originAddress
           ? `Claiming ${displayAmount} NIGHT for ${assetId} from ${originAddress} in Vault ${vaultName} to address ${destinationAddress}`

@@ -116,6 +116,11 @@ export class ApiController {
       console.log(
         `Transferring claims from vault ${vaultAccountId} to ${recipientAddress} with policy ${tokenPolicyId} and amount ${requiredTokenAmount}`
       );
+
+      const amountInSmallestUnit = Math.floor(
+        Number(requiredTokenAmount) * 1_000_000
+      );
+
       const { txHash, senderAddress, tokenName } =
         (await this.api.executeTransaction({
           vaultAccountId,
@@ -124,7 +129,7 @@ export class ApiController {
           params: {
             recipientAddress,
             tokenPolicyId,
-            requiredTokenAmount: Number(requiredTokenAmount),
+            requiredTokenAmount: amountInSmallestUnit,
           },
         })) as TransferClaimsResponse;
 

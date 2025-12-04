@@ -12,4 +12,6 @@ export const nightPolicyId =
   
 export const nightTokenName = "NIGHT";
 
+export const nightDecimals = 6;
+
 export const tokenTransactionFee = 200000;
