@@ -1,4 +1,4 @@
-import { SupportedAssetIds, SupportedBlockchains } from "../types.js";
+import { SupportedAssetIds, SupportedBlockchains } from "../types/index.js";
 
 const blockchainToAssetIdsMap: Record<SupportedBlockchains, SupportedAssetIds> =
   {

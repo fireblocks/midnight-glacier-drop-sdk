@@ -1,0 +1,5 @@
+# Collapse generated files in GitHub PRs
+docs/** linguist-generated=true
+
+# Mark vendored/third-party code
+vendor/** linguist-vendored=true

@@ -1,5 +1,9 @@
 node_modules/
 secrets/
+data/
+vendor/*
+!vendor/ashmaize/
+!vendor/ashmaize/**
 
 .npm
 .npmrc
@@ -13,7 +17,6 @@ yarn-error.log*
 build/
 dist/
 
-package-lock.json
 yarn.lock
 
 .env
