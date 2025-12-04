@@ -92,7 +92,6 @@ export const configureRouter = (api: FbNightApiService): Router => {
    *             example:
    *               vaultAccountId: "123"
    *               recipientAddress: "addr1qxyz"
-   *               tokenPolicyId: "abc123"
    *               requiredTokenAmount: 1000
    *     responses:
    *       200:
