@@ -1,4 +1,4 @@
-import { redemptionPhaseBaseUrl } from "../constants.js";
+import { midnightClaimAddress } from "../constants.js";
 import axiosInstance from "../utils/httpClient.js";
 import { Logger } from "../utils/logger.js";
 import {
@@ -141,7 +141,7 @@ export class ThawsService {
    * tokens will be available, but later periods may have higher network fees.
    */
   public getPhaseConfig = async (): Promise<PhaseConfigResponse> => {
-    const url = `${redemptionPhaseBaseUrl}/thaws/phase-config`;
+    const url = `${midnightClaimAddress}/thaws/phase-config`;
     try {
       this.logger.info("Fetching phase configuration");
 
@@ -250,7 +250,7 @@ export class ThawsService {
     try {
       this.logger.info(`Fetching thaw schedule for address: ${destAddress}`);
 
-      const url = `${redemptionPhaseBaseUrl}/thaws/${destAddress}/schedule`;
+      const url = `${midnightClaimAddress}/thaws/${destAddress}/schedule`;
       const response = await axiosInstance.get<ThawScheduleResponse>(url);
 
       if (response.status === 200) {
@@ -391,10 +391,11 @@ export class ThawsService {
     try {
       this.logger.info(`Building thaw transaction for address: ${destAddress}`);
 
-      const url = `${redemptionPhaseBaseUrl}/thaws/${destAddress}/transactions/build`;
-      const response = await axiosInstance.post<TransactionBuildResponse>(url, [
-        request,
-      ]);
+      const url = `${midnightClaimAddress}/thaws/${destAddress}/transactions/build`;
+      const response = await axiosInstance.post<TransactionBuildResponse>(
+        url,
+        request
+      );
 
       if (response.status === 200) {
         return response.data;
@@ -549,10 +550,11 @@ export class ThawsService {
         `Submitting thaw transaction for address: ${destAddress}`
       );
 
-      const url = `${redemptionPhaseBaseUrl}/thaws/${destAddress}/transactions`;
-      const response = await axiosInstance.post<ThawTransactionResponse>(url, [
-        request,
-      ]);
+      const url = `${midnightClaimAddress}/thaws/${destAddress}/transactions`;
+      const response = await axiosInstance.post<ThawTransactionResponse>(
+        url,
+        request
+      );
 
       if (response.status === 200) {
         return response.data;
@@ -693,7 +695,7 @@ export class ThawsService {
         `Fetching transaction status for ${transactionId} at address: ${destAddress}`
       );
 
-      const url = `${redemptionPhaseBaseUrl}/thaws/${destAddress}/transactions/${transactionId}`;
+      const url = `${midnightClaimAddress}/thaws/${destAddress}/transactions/${transactionId}`;
       const response = await axiosInstance.get<ThawTransactionStatus>(url);
 
       if (response.status === 200) {
