@@ -9,14 +9,18 @@ export const scavengerHuntBaseUrl = "https://scavenger.prod.gd.midnighttge.io";
 export const redemptionPhaseBaseUrl =
   "https://redemption-staging.gd.midnighttge.io";
 
+export const blockfrostBaseUrl = "https://cardano-mainnet.blockfrost.io/api/v0";
+
 export const termsAndConditionsHash =
   "31a6bab50a84b8439adcfb786bb2020f6807e6e8fda629b424110fc7bb1c6b8b";
 
 export const nightPolicyId =
   "0691b2fecca1ac4f53cb6dfb00b7013e561d1f34403b957cbb5af1fa";
-  
+
 export const nightTokenName = "NIGHT";
 
-export const nightDecimals = 6;
+export const nightNumberOfDecimals = 6;
+
+export const nightDecimals = 1_000_000;
 
 export const tokenTransactionFee = 200000;

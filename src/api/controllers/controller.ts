@@ -6,7 +6,7 @@ import {
   TransferClaimsResponse,
 } from "../../types/index.js";
 import { FbNightApiService } from "../apiService.js";
-import { nightPolicyId } from "../../constants.js";
+import { nightDecimals, nightPolicyId } from "../../constants.js";
 import { Logger } from "../../utils/logger.js";
 
 /**
@@ -158,7 +158,6 @@ export class ApiController {
    * @param req - Express request object
    * @param req.body.vaultAccountId - The source vault account ID
    * @param req.body.recipientAddress - The destination address for the tokens
-   * @param req.body.tokenPolicyId - The policy ID of the token to transfer
    * @param req.body.requiredTokenAmount - The amount of tokens to transfer
    * @param res - Express response object
    * @returns A Promise that resolves when the response is sent with transaction details
@@ -169,7 +168,6 @@ export class ApiController {
    * Body: {
    *   "vaultAccountId": "123",
    *   "recipientAddress": "addr1...",
-   *   "tokenPolicyId": "abc123...",
    *   "requiredTokenAmount": "1000000"
    * }
    * Response: {
@@ -189,7 +187,7 @@ export class ApiController {
       );
 
       const amountInSmallestUnit = Math.floor(
-        Number(requiredTokenAmount) * 1_000_000
+        Number(requiredTokenAmount) * nightDecimals
       );
 
       const { txHash, senderAddress, tokenName } =

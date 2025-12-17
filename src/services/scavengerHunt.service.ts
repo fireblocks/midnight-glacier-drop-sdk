@@ -1,5 +1,5 @@
 import axios from "axios";
-import { scavengerHuntBaseUrl } from "../constants.js";
+import { nightDecimals, scavengerHuntBaseUrl } from "../constants.js";
 import {
   RegistrationReceipt,
   SolutionResponse,
@@ -1031,14 +1031,14 @@ export class ScavengerHuntService {
             day,
             solutions,
             star,
-            night: star / 1_000_000,
+            night: star / nightDecimals,
           });
         }
       }
 
       return {
         totalStar,
-        totalNight: totalStar / 1_000_000,
+        totalNight: totalStar / nightDecimals,
         breakdown,
       };
     } catch (error: any) {
