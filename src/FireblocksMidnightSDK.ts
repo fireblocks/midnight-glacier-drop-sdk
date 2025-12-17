@@ -9,7 +9,11 @@ import * as lucid from "lucid-cardano";
 import { FireblocksService } from "./services/fireblocks.service.js";
 import { ClaimApiService } from "./services/claim.api.service.js";
 import { ProvetreeService } from "./services/provetree.service.js";
-import { nightTokenName, tokenTransactionFee } from "./constants.js";
+import {
+  blockfrostBaseUrl,
+  nightTokenName,
+  tokenTransactionFee,
+} from "./constants.js";
 import { getAssetIdsByBlockchain } from "./utils/general.js";
 import {
   buildCoseSign1,
@@ -50,6 +54,7 @@ import {
   TransactionBuildResponse,
   TransactionSubmissionRequest,
 } from "./types/index.js";
+import axios from "axios";
 
 export class FireblocksMidnightSDK {
   private fireblocksService: FireblocksService;
@@ -159,7 +164,7 @@ export class FireblocksMidnightSDK {
           ? "Preprod"
           : "Preview";
         sdkInstance.lucid = await lucid.Lucid.new(
-          new lucid.Blockfrost(blockfrostProjectId, blockfrostProjectId),
+          new lucid.Blockfrost(blockfrostBaseUrl, blockfrostProjectId),
           network
         );
       }
@@ -322,13 +327,12 @@ export class FireblocksMidnightSDK {
       if (!this.lucid) {
         await this.initializeLucid();
       }
-      const { blockfrost, utxos, accumulatedAda, accumulatedTokenAmount } =
-        await this.fetchAndValidateUtxos(
-          tokenPolicyId,
-          requiredTokenAmount,
-          minRecipientLovelace,
-          minChangeLovelace
-        );
+      const { blockfrost, utxos } = await this.fetchAndValidateUtxos(
+        tokenPolicyId,
+        requiredTokenAmount,
+        minRecipientLovelace,
+        minChangeLovelace
+      );
 
       const convertedUtxos = this.convertUtxosForLucid(utxos);
 
@@ -339,8 +343,6 @@ export class FireblocksMidnightSDK {
         tokenPolicyId,
         requiredTokenAmount,
         minRecipientLovelace,
-        accumulatedAda,
-        accumulatedTokenAmount,
       });
 
       const witnessHex = await this.signTransferTransaction(unsignedTx);
@@ -383,8 +385,6 @@ export class FireblocksMidnightSDK {
   ): Promise<{
     blockfrost: BlockFrostAPI;
     utxos: any[];
-    accumulatedAda: number;
-    accumulatedTokenAmount: number;
   }> {
     const transactionFee = BigInt(tokenTransactionFee);
 
@@ -419,8 +419,6 @@ export class FireblocksMidnightSDK {
 
     return {
       utxos: selectedUtxos,
-      accumulatedAda,
-      accumulatedTokenAmount,
       blockfrost,
     };
   }
@@ -504,8 +502,6 @@ export class FireblocksMidnightSDK {
     tokenPolicyId: string;
     requiredTokenAmount: number;
     minRecipientLovelace: number;
-    accumulatedAda: number;
-    accumulatedTokenAmount: number;
   }): Promise<lucid.TxComplete> {
     const {
       blockfrost,
@@ -514,12 +510,7 @@ export class FireblocksMidnightSDK {
       tokenPolicyId,
       requiredTokenAmount,
       minRecipientLovelace,
-      accumulatedAda,
-      accumulatedTokenAmount,
     } = params;
-
-    const transactionFee = BigInt(tokenTransactionFee);
-    const adaTarget = BigInt(minRecipientLovelace) + transactionFee;
 
     const assetNameUnit =
       tokenPolicyId + lucid.toHex(Buffer.from(nightTokenName, "utf8"));
@@ -534,17 +525,21 @@ export class FireblocksMidnightSDK {
       .payToAddress(recipientAddress, {
         lovelace: BigInt(minRecipientLovelace),
         [assetNameUnit]: BigInt(requiredTokenAmount),
-      })
-      .payToAddress(this.address, {
-        lovelace: BigInt(accumulatedAda) - adaTarget,
-        [assetNameUnit]:
-          BigInt(accumulatedTokenAmount) - BigInt(requiredTokenAmount),
       });
 
     const ttl = await calculateTtl(blockfrost, this.lucid!, 2600);
     tx = tx.validTo(ttl);
 
-    return await tx.complete();
+    try {
+      // Lucid auto-balances and sends change to source address
+      return await tx.complete({ change: { address: this.address } });
+    } catch (error: any) {
+      this.logger.error("Transaction build failed:", {
+        error: error.message || error,
+        stack: error.stack,
+      });
+      throw error;
+    }
   }
 
   private async signTransferTransaction(
@@ -944,6 +939,11 @@ export class FireblocksMidnightSDK {
       );
 
       this.logRedemption(destAddress, submitResponse);
+      this.logger.appendData("redeem-history", {
+        destAddress,
+        transactionId: submitResponse.transaction_id,
+        estimatedSubmissionTime: submitResponse.estimated_submission_time,
+      });
 
       if (params.waitForConfirmation) {
         this.logger.info(
@@ -1187,7 +1187,7 @@ export class FireblocksMidnightSDK {
 
       if (!utxos || utxos.length === 0) {
         this.logger.warn(
-          `No UTXOs available for collateral at address: ${destAddress}`
+          `No UTXOs available for collateral at address: ${destAddress}. Transfer funds to this address.`
         );
         return [];
       }
