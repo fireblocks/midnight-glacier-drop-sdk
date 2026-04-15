@@ -592,24 +592,39 @@ export class FireblocksService {
   ): Promise<VaultWalletAddress[]> => {
     try {
       const allAddresses: VaultWalletAddress[] = [];
+      const PAGE_LIMIT = 100;
       let after: string | undefined = undefined;
 
-      do {
-        const response =
-          await this.fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
-            vaultAccountId,
-            assetId,
-            limit: 100,
-            after,
-          });
-
-        const addresses = response?.data?.addresses;
-        if (addresses && Array.isArray(addresses)) {
-          allAddresses.push(...addresses);
+      while (true) {
+        let response;
+        try {
+          response =
+            await this.fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
+              vaultAccountId,
+              assetId,
+              limit: PAGE_LIMIT,
+              after,
+            });
+        } catch (error: any) {
+          this.logger.error(
+            `Failed to fetch addresses page for vault account ${vaultAccountId}:`,
+            error
+          );
+          break;
         }
 
+        const addresses = response?.data?.addresses;
+        if (!addresses || !Array.isArray(addresses)) {
+          break;
+        }
+
+        allAddresses.push(...addresses);
         after = response?.data?.paging?.after;
-      } while (after);
+
+        if (!after || addresses.length < PAGE_LIMIT) {
+          break;
+        }
+      }
 
       if (allAddresses.length === 0) {
         this.logger.warn(
