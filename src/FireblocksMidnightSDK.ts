@@ -631,7 +631,6 @@ export class FireblocksMidnightSDK {
 
     const messages = addressIndices.map((idx) => ({
       content: txHash,
-      bip44change: 0,
       bip44addressIndex: idx,
     }));
 
@@ -1154,7 +1153,6 @@ export class FireblocksMidnightSDK {
         rawMessageData: {
           messages: [{
             content: transactionId,
-            bip44change: 0,
             bip44addressIndex: addressIndex,
           }],
         },
