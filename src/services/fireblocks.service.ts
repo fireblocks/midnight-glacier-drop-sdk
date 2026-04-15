@@ -1,6 +1,7 @@
 import {
   ConfigurationOptions as FireblocksConfig,
   Fireblocks,
+  SignedMessage,
   SignedMessageSignature,
   TransactionRequest,
   SignedMessageAlgorithmEnum,
@@ -205,6 +206,39 @@ export class FireblocksService {
     } catch (error: any) {
       this.logger.error(
         `${transactionPayload.assetId} signing error:`,
+        error.message
+      );
+      throw error;
+    }
+  };
+
+  /**
+   * Returns all signed messages (one per input message).
+   * Use this when signing for multiple address indices in a single raw transaction.
+   */
+  public broadcastTransactionMulti = async (
+    transactionPayload: TransactionRequest
+  ): Promise<SignedMessage[]> => {
+    try {
+      const transactionResponse =
+        await this.fireblocksSDK.transactions.createTransaction({
+          transactionRequest: transactionPayload,
+        });
+
+      const txId = transactionResponse.data.id;
+      if (!txId) throw new Error("Transaction ID is undefined.");
+
+      const completedTx = await getTxStatus(txId, this.fireblocksSDK);
+      const allMessages = completedTx.signedMessages ?? [];
+
+      if (allMessages.length === 0) {
+        throw new Error("No signed messages found in Fireblocks response");
+      }
+
+      return allMessages;
+    } catch (error: any) {
+      this.logger.error(
+        `${transactionPayload.assetId} multi-signing error:`,
         error.message
       );
       throw error;
@@ -557,19 +591,48 @@ export class FireblocksService {
     assetId: SupportedAssetIds
   ): Promise<VaultWalletAddress[]> => {
     try {
-      const addressesResponse =
-        await this.fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
-          vaultAccountId,
-          assetId,
-        });
+      const allAddresses: VaultWalletAddress[] = [];
+      const PAGE_LIMIT = 100;
+      let after: string | undefined = undefined;
 
-      const addresses = addressesResponse.data.addresses;
-      if (!addresses) {
-        throw new Error(
-          `Failed to fetch addresses for vault account ${vaultAccountId} and asset ${assetId}`
+      while (true) {
+        let response;
+        try {
+          response =
+            await this.fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
+              vaultAccountId,
+              assetId,
+              limit: PAGE_LIMIT,
+              after,
+            });
+        } catch (error: any) {
+          this.logger.error(
+            `Failed to fetch addresses page for vault account ${vaultAccountId}:`,
+            error
+          );
+          break;
+        }
+
+        const addresses = response?.data?.addresses;
+        if (!addresses || !Array.isArray(addresses)) {
+          break;
+        }
+
+        allAddresses.push(...addresses);
+        after = response?.data?.paging?.after;
+
+        if (!after || addresses.length < PAGE_LIMIT) {
+          break;
+        }
+      }
+
+      if (allAddresses.length === 0) {
+        this.logger.warn(
+          `No addresses found for vault account ${vaultAccountId} and asset ${assetId}`
         );
       }
-      return addresses;
+
+      return allAddresses;
     } catch (error: any) {
       throw new Error(
         `Failed to get address for vault account ${vaultAccountId}: ${error.message}`

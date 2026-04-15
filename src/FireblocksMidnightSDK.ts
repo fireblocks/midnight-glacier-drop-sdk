@@ -19,6 +19,9 @@ import {
   buildCoseSign1,
   calculateTtl,
   fetchAndSelectUtxos,
+  fetchUtxos,
+  calculateTokenAmount,
+  getLovelaceAmount,
 } from "./utils/cardano.utils.js";
 
 import { config } from "./utils/config.js";
@@ -327,7 +330,7 @@ export class FireblocksMidnightSDK {
       if (!this.lucid) {
         await this.initializeLucid();
       }
-      const { blockfrost, utxos } = await this.fetchAndValidateUtxos(
+      const { blockfrost, utxos, addressIndices } = await this.fetchAndValidateUtxosPerWallet(
         tokenPolicyId,
         requiredTokenAmount,
         minRecipientLovelace,
@@ -345,11 +348,11 @@ export class FireblocksMidnightSDK {
         minRecipientLovelace,
       });
 
-      const witnessHex = await this.signTransferTransaction(unsignedTx);
+      const witnessHexes = await this.signTransferTransaction(unsignedTx, addressIndices);
 
       const txHash = await this.assembleAndSubmitTransaction(
         unsignedTx,
-        witnessHex
+        witnessHexes
       );
 
       return {
@@ -421,6 +424,84 @@ export class FireblocksMidnightSDK {
       utxos: selectedUtxos,
       blockfrost,
     };
+  }
+
+  private async fetchAndValidateUtxosPerWallet(
+    tokenPolicyId: string,
+    requiredTokenAmount: number,
+    minRecipientLovelace: number,
+    minChangeLovelace: number
+  ): Promise<{
+    blockfrost: BlockFrostAPI;
+    utxos: any[];
+    addressIndices: number[];
+  }> {
+    const transactionFee = Number(BigInt(tokenTransactionFee));
+    const adaTarget = minRecipientLovelace + transactionFee + minChangeLovelace;
+
+    const allAddresses = await this.fireblocksService.getVaultAccountAddresses(
+      this.vaultAccountId,
+      this.assetId
+    );
+
+    const blockfrost = new BlockFrostAPI({ projectId: this.blockfrostProjectId! });
+
+    const taggedUtxos: Array<{ utxo: any; addressIndex: number }> = [];
+    for (const walletAddr of allAddresses) {
+      const addrStr = walletAddr.address;
+      if (!addrStr) continue;
+      const addressIndex = walletAddr.bip44AddressIndex ?? 0;
+      try {
+        const utxos = await fetchUtxos(blockfrost, addrStr);
+        for (const utxo of utxos) {
+          taggedUtxos.push({ utxo, addressIndex });
+        }
+      } catch {
+        // Address has no UTXOs on-chain — skip
+      }
+    }
+
+    const nightUtxos = taggedUtxos
+      .filter(({ utxo }) => calculateTokenAmount(utxo, tokenPolicyId, nightTokenName) > 0)
+      .sort(
+        (a, b) =>
+          calculateTokenAmount(b.utxo, tokenPolicyId, nightTokenName) -
+          calculateTokenAmount(a.utxo, tokenPolicyId, nightTokenName)
+      );
+
+    const adaOnlyUtxos = taggedUtxos
+      .filter(({ utxo }) => calculateTokenAmount(utxo, tokenPolicyId, nightTokenName) === 0)
+      .sort((a, b) => getLovelaceAmount(b.utxo) - getLovelaceAmount(a.utxo));
+
+    const allUtxos = [...nightUtxos, ...adaOnlyUtxos];
+    const selected: Array<{ utxo: any; addressIndex: number }> = [];
+    let accumulatedTokenAmount = 0;
+    let accumulatedAda = 0;
+
+    for (const tagged of allUtxos) {
+      selected.push(tagged);
+      accumulatedTokenAmount += calculateTokenAmount(tagged.utxo, tokenPolicyId, nightTokenName);
+      accumulatedAda += getLovelaceAmount(tagged.utxo);
+      if (accumulatedTokenAmount >= requiredTokenAmount && accumulatedAda >= adaTarget) break;
+    }
+
+    const selectedUtxos = selected.map((t) => t.utxo);
+    const addressIndices = [...new Set(selected.map((t) => t.addressIndex))];
+
+    this.logger.info(
+      `selected ${selected.length} UTXOs — ${accumulatedTokenAmount} NIGHT, ${accumulatedAda} lovelace ` +
+        `(need: ${requiredTokenAmount} NIGHT, ${adaTarget} lovelace) from ${addressIndices.length} address(es)`
+    );
+
+    this.validateSufficientBalance(
+      accumulatedAda,
+      accumulatedTokenAmount,
+      requiredTokenAmount,
+      minRecipientLovelace,
+      transactionFee
+    );
+
+    return { blockfrost, utxos: selectedUtxos, addressIndices };
   }
 
   private validateSufficientBalance(
@@ -543,9 +624,15 @@ export class FireblocksMidnightSDK {
   }
 
   private async signTransferTransaction(
-    unsignedTx: lucid.TxComplete
-  ): Promise<string> {
+    unsignedTx: lucid.TxComplete,
+    addressIndices: number[]
+  ): Promise<string[]> {
     const txHash = unsignedTx.toHash();
+
+    const messages = addressIndices.map((idx) => ({
+      content: txHash,
+      bip44addressIndex: idx,
+    }));
 
     const transactionPayload = {
       assetId: this.assetId,
@@ -557,27 +644,21 @@ export class FireblocksMidnightSDK {
       note: "Transfer ADA native tokens",
       extraParameters: {
         rawMessageData: {
-          messages: [{ content: txHash }],
+          messages,
         },
       },
     };
 
-    const fbResponse = await this.fireblocksService.broadcastTransaction(
+    const signedMessages = await this.fireblocksService.broadcastTransactionMulti(
       transactionPayload
     );
 
-    if (
-      !fbResponse?.publicKey ||
-      !fbResponse?.signature ||
-      !fbResponse.signature.fullSig
-    ) {
-      throw new Error("Missing publicKey or signature from Fireblocks");
-    }
-
-    return this.createTransferWitnessSet(
-      fbResponse.publicKey,
-      fbResponse.signature.fullSig
-    );
+    return signedMessages.map((msg) => {
+      if (!msg.publicKey || !msg.signature?.fullSig) {
+        throw new Error("Missing publicKey or signature from Fireblocks");
+      }
+      return this.createTransferWitnessSet(msg.publicKey, msg.signature.fullSig);
+    });
   }
 
   private createTransferWitnessSet(
@@ -603,9 +684,9 @@ export class FireblocksMidnightSDK {
 
   private async assembleAndSubmitTransaction(
     unsignedTx: lucid.TxComplete,
-    witnessHex: string
+    witnessHexes: string[]
   ): Promise<string> {
-    const signedTxComplete = unsignedTx.assemble([witnessHex]);
+    const signedTxComplete = unsignedTx.assemble(witnessHexes);
     const signedTx = await signedTxComplete.complete();
     const txHexString = signedTx.toString();
 
@@ -1058,25 +1139,27 @@ export class FireblocksMidnightSDK {
     transactionId: string,
     addressIndex: number = 0
   ): Promise<string> => {
+    this.logger.info(`Signing redemption transaction for vault ${vaultAccountId}, address index ${addressIndex}`);
+
     const transactionPayload = {
       assetId: SupportedAssetIds.ADA,
       operation: TransactionOperation.Raw,
       source: {
         type: TransferPeerPathType.VaultAccount,
         id: vaultAccountId,
-        addressIndex: addressIndex,
       },
-      note: `Redeem NIGHT tokens from address index ${addressIndex}`,
+      note: `Redeem NIGHT tokens from vault account ${vaultAccountId} address index ${addressIndex}`,
       extraParameters: {
         rawMessageData: {
-          messages: [{ content: transactionId }],
+          messages: [{
+            content: transactionId,
+            bip44addressIndex: addressIndex,
+          }],
         },
       },
     };
 
-    const fbResponse = await this.fireblocksService.broadcastTransaction(
-      transactionPayload
-    );
+    const fbResponse = await this.fireblocksService.broadcastTransaction(transactionPayload);
 
     if (!fbResponse?.signature || !fbResponse.signature.fullSig) {
       throw new Error("Missing signature from Fireblocks");
@@ -1086,10 +1169,9 @@ export class FireblocksMidnightSDK {
       throw new Error("Missing public key from Fireblocks");
     }
 
-    return this.createWitnessSet(
-      fbResponse.publicKey,
-      fbResponse.signature.fullSig
-    );
+    this.logger.info(`Fireblocks signing completed for vault ${vaultAccountId}, address index ${addressIndex}`);
+
+    return this.createWitnessSet(fbResponse.publicKey, fbResponse.signature.fullSig);
   };
 
   private validateRedemptionWindow = async (): Promise<void> => {
