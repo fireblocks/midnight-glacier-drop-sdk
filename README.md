@@ -301,7 +301,11 @@ Notes:
   Anyone holding the token can choose that address, so treat the token like a signing credential.
 - This token authenticates callers to this service. Which vaults the service can sign for is governed by Fireblocks:
   use a dedicated API user restricted to the vaults it needs, with a Transaction Authorization Policy (TAP).
-- In Swagger UI (`/api-docs`), use **Authorize** and paste the token.
+- `/api-docs` sits behind the same authentication as the API, so a browser navigating to it directly gets `401`
+  (browsers cannot attach an `Authorization` header to a page load). Fetch the spec with the header instead:
+  `curl -H "Authorization: Bearer $API_AUTH_TOKEN" http://localhost:8000/api-docs-json`, then load that JSON into
+  an external viewer (e.g. Swagger Editor, Postman). Once the UI is open, **Authorize** applies the token to
+  "Try it out" requests.
 
 ### API Endpoints
 
@@ -462,6 +466,8 @@ Access the interactive API documentation at:
 
 - Swagger UI: `http://localhost:8000/api-docs`
 - OpenAPI JSON: `http://localhost:8000/api-docs-json`
+
+Both require the bearer token (see [Authentication](#authentication)).
 
 ### TypeDoc Documentation
 
