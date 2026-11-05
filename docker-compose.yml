@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./secrets/fireblocks_secret.key:/secrets/fireblocks_secret.key:ro
       - ./.env:/app/.env:ro
