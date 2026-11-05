@@ -1,6 +1,6 @@
 {
   "name": "midnight-drop-fireblocks-sdk",
-  "version": "1.2.1",
+  "version": "2.0.0",
   "main": "app.js",
   "type": "module",
   "scripts": {
@@ -8,7 +8,8 @@
     "build:w": "tsc -w",
     "start": "nodemon ./dist/app.js",
     "dev": "concurrently  \"npm:build:w\" \"npm:start\"",
-    "docs": "typedoc src"
+    "docs": "typedoc src",
+    "test": "tsx --test src/__tests__/*.test.ts"
   },
   "keywords": [],
   "author": "",
