@@ -109,7 +109,7 @@ describe("server startup gate", () => {
           allowUnauthenticated: false,
           production: true,
         }),
-      /not configured/i
+      /not configured/i,
     );
   });
 
@@ -121,7 +121,7 @@ describe("server startup gate", () => {
           allowUnauthenticated: true,
           production: true,
         }),
-      /production/i
+      /production/i,
     );
   });
 });
