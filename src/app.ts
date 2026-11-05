@@ -4,7 +4,7 @@ import { Logger, LogLevel } from "./utils/logger.js";
 
 const logLevel = process.env.LOG_LEVEL || "INFO";
 Logger.setLogLevel(
-  LogLevel[logLevel as keyof typeof LogLevel] || LogLevel.INFO
+  LogLevel[logLevel as keyof typeof LogLevel] || LogLevel.INFO,
 );
 const logger = new Logger("app:server-initializer");
 (() => {
@@ -13,5 +13,7 @@ const logger = new Logger("app:server-initializer");
     startServer();
   } catch (e) {
     logger.error("Error starting server:", e);
+    // Never keep running without a listener (or without the auth gate having passed).
+    process.exit(1);
   }
 })();

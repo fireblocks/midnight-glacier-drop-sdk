@@ -7,9 +7,20 @@ const options = {
     openapi: "3.0.0",
     info: {
       title: "Midnight Glacier Drop Fireblocks SDK API",
-      version: "1.2.0",
+      version: "2.0.0",
       description: "API documentation for Midnight Glacier Drop Fireblocks SDK",
     },
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          description:
+            "Shared secret configured as API_AUTH_TOKEN on the server.",
+        },
+      },
+    },
+    security: [{ bearerAuth: [] }],
     servers: [
       {
         url: `http://localhost:${config.PORT}/`,

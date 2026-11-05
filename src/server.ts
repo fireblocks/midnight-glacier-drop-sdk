@@ -11,10 +11,16 @@ import { BasePath } from "@fireblocks/ts-sdk";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { Logger, LogLevel } from "./utils/logger.js";
+import {
+  AuthConfig,
+  assertAuthConfigured,
+  loadAuthConfig,
+  requireAuth,
+} from "./api/auth.js";
 
 const logLevel = "INFO";
 Logger.setLogLevel(
-  LogLevel[logLevel as keyof typeof LogLevel] || LogLevel.INFO
+  LogLevel[logLevel as keyof typeof LogLevel] || LogLevel.INFO,
 );
 const logger = new Logger("app:server-setup");
 
@@ -26,15 +32,22 @@ const fbNightApiServiceConfigs: ApiServiceConfig = {
     maxPoolSize: parseInt(process.env.POOL_MAX_SIZE || "100"),
     idleTimeoutMs: parseInt(process.env.POOL_IDLE_TIMEOUT_MS || "1800000"),
     cleanupIntervalMs: parseInt(
-      process.env.POOL_CLEANUP_INTERVAL_MS || "300000"
+      process.env.POOL_CLEANUP_INTERVAL_MS || "300000",
     ),
   },
 };
 
-const startServer = () => {
+/**
+ * Builds the Express app. Authentication is mounted before every route, including
+ * the API, Swagger and static docs, so a route added later is protected by default.
+ * Only /health stays open, for liveness probes.
+ */
+export const createApp = (authConfig: AuthConfig = loadAuthConfig()) => {
   const app = express();
 
   configureMiddlewares(app);
+
+  app.use(requireAuth(authConfig, { publicPaths: ["/health"] }));
 
   const fbNightApiService = new FbNightApiService(fbNightApiServiceConfigs);
   const router = configureRouter(fbNightApiService);
@@ -55,8 +68,19 @@ const startServer = () => {
   const __dirname = dirname(__filename);
   app.use("/docs", express.static(path.join(__dirname, "../docs")));
 
-  app.listen(config.PORT, () => {
-    logger.info(`Fireblocks-Midnight SDK listening on port ${config.PORT}`);
+  return { app, shutdown: () => fbNightApiService.shutdown() };
+};
+
+const startServer = (authConfig: AuthConfig = loadAuthConfig()) => {
+  // Fail closed: refuse to start as an open signing proxy when auth is unconfigured.
+  assertAuthConfigured(authConfig);
+
+  const { app } = createApp(authConfig);
+
+  app.listen(config.PORT, config.HOST, () => {
+    logger.info(
+      `Fireblocks-Midnight SDK listening on ${config.HOST}:${config.PORT}`,
+    );
   });
 };
 
@@ -64,7 +88,7 @@ const configureMiddlewares = (app: Express) => {
   app.use(
     cors({
       origin: [`http://localhost:${config.CLIENT_PORT}`],
-    })
+    }),
   );
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
