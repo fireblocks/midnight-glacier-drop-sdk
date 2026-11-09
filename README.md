@@ -39,6 +39,12 @@ Create a `.env` file in the project root:
 ```bash
 # Server Configuration
 PORT=8000
+# Interface to bind. Defaults to 127.0.0.1 (loopback only).
+# HOST=127.0.0.1
+
+# REST API authentication (required - the server refuses to start without it)
+# Generate with: openssl rand -hex 32
+API_AUTH_TOKEN=your_generated_token
 
 # Fireblocks Configuration
 FIREBLOCKS_API_KEY=your_fireblocks_api_key
@@ -74,7 +80,7 @@ import { ConfigurationOptions } from "@fireblocks/ts-sdk";
 async function initializeSdk(
   fireblocksConfig: ConfigurationOptions,
   vaultAccountId: string,
-  chain: SupportedBlockchains
+  chain: SupportedBlockchains,
 ) {
   const sdk = await FireblocksMidnightSDK.create({
     fireblocksConfig,
@@ -87,7 +93,7 @@ async function initializeSdk(
 // Example: Check eligibility for claims
 async function checkEligibility(
   vaultAccountId: string = "your-vault-id",
-  chain: SupportedBlockchains = SupportedBlockchains.CARDANO
+  chain: SupportedBlockchains = SupportedBlockchains.CARDANO,
 ) {
   // Initialize SDK for this vault and chain
   const sdk = await initializeSdk(vaultAccountId, chain);
@@ -103,7 +109,7 @@ async function checkEligibility(
 // Example: Get historical claims (hitorical)
 async function getClaimsHistory(
   vaultAccountId: string = "your-vault-id",
-  chain: SupportedBlockchains = SupportedBlockchains.ETHEREUM
+  chain: SupportedBlockchains = SupportedBlockchains.ETHEREUM,
 ) {
   // Initialize SDK for this vault and chain
   const sdk = await initializeSdk(vaultAccountId, chain);
@@ -117,7 +123,7 @@ async function getClaimsHistory(
 async function executeClaims(
   vaultAccountId: string = "your-vault-id",
   chain: SupportedBlockchains = SupportedBlockchains.CARDANO,
-  destinationAddress: string = "addr1_destination_address" // Where to send claimed tokens
+  destinationAddress: string = "addr1_destination_address", // Where to send claimed tokens
 ) {
   try {
     // Initialize SDK for this vault and chain
@@ -138,7 +144,7 @@ async function transferNightTokens(
   tokenPolicyId: string = "your_token_policy_id", // NIGHT token policy ID
   tokenAmount: string = 1000, // Amount of NIGHT tokens to transfer
   minRecipientLovelace?: number, // Minimum ADA for recipient (default: 1,200,000)
-  minChangeLovelace?: number // Minimum ADA for change (default: 1,200,000)
+  minChangeLovelace?: number, // Minimum ADA for change (default: 1,200,000)
 ) {
   try {
     // Initialize SDK for Cardano
@@ -150,7 +156,7 @@ async function transferNightTokens(
       tokenPolicyId,
       tokenAmount,
       minRecipientLovelace,
-      minChangeLovelace
+      minChangeLovelace,
     );
     console.log("Transfer successful:", result);
     console.log("Transaction hash:", result.txHash);
@@ -242,7 +248,7 @@ docker build -t midnight-glacier-drop-sdk .
 # Run container
 docker run -d \
   --name midnight-glacier-drop-sdk \
-  -p 8000:8000 \
+  -p 127.0.0.1:8000:8000 \
   -v $(pwd)/secrets:/app/secrets:ro \
   -v $(pwd)/.env:/app/.env:ro \
   midnight-glacier-drop-sdk
@@ -265,12 +271,41 @@ The `docker-compose.yml` configuration:
 
 - Mounts the Fireblocks secret key from `./secrets`
 - Loads environment variables from `.env`
-- Exposes the API on port 8000
+- Publishes the API on `127.0.0.1:8000` only (loopback on the host). Put a reverse proxy or
+  private network in front of it if other machines need access. Do not publish it on `0.0.0.0`.
 - Includes automatic restart on failure
 
 ## REST API Usage
 
 The SDK provides a REST API accessible at `http://localhost:8000`. Full API documentation is available at `http://localhost:8000/api-docs`.
+
+### Authentication
+
+Every endpoint except `GET /health` (including `/api-docs`, `/api-docs-json` and `/docs`) requires a
+bearer token matching the server's `API_AUTH_TOKEN`:
+
+```bash
+curl -H "Authorization: Bearer $API_AUTH_TOKEN" "http://localhost:8000/api/check/cardano/vault-123"
+```
+
+| Situation                                                   | Result                                                                                               |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Missing or malformed `Authorization` header, or wrong token | `401`                                                                                                |
+| `API_AUTH_TOKEN` not set                                    | Server refuses to start (and answers `503` if it somehow runs)                                       |
+| `ALLOW_UNAUTHENTICATED=true`                                | Honoured **only** when `NODE_ENV=development` or `test`; refused at startup in any other environment |
+
+Notes:
+
+- Generate the token with `openssl rand -hex 32` and keep it in a secrets manager or the git-ignored `.env`. Never commit it.
+- Claims, transfers and scavenger-hunt donations sign a message containing a destination address taken from the request.
+  Anyone holding the token can choose that address, so treat the token like a signing credential.
+- This token authenticates callers to this service. Which vaults the service can sign for is governed by Fireblocks:
+  use a dedicated API user restricted to the vaults it needs, with a Transaction Authorization Policy (TAP).
+- `/api-docs` sits behind the same authentication as the API, so a browser navigating to it directly gets `401`
+  (browsers cannot attach an `Authorization` header to a page load). Fetch the spec with the header instead:
+  `curl -H "Authorization: Bearer $API_AUTH_TOKEN" http://localhost:8000/api-docs-json`, then load that JSON into
+  an external viewer (e.g. Swagger Editor, Postman). Once the UI is open, **Authorize** applies the token to
+  "Try it out" requests.
 
 ### API Endpoints
 
@@ -278,7 +313,8 @@ The SDK provides a REST API accessible at `http://localhost:8000`. Full API docu
 
 ```bash
 # Check if an address is eligible for claims
-curl -X GET "http://localhost:8000/api/check/cardano/vault-123"
+curl -X GET "http://localhost:8000/api/check/cardano/vault-123" \
+  -H "Authorization: Bearer $API_AUTH_TOKEN"
 ```
 
 Response:
@@ -293,7 +329,8 @@ Response:
 
 ```bash
 # Get all available claims for a vault
-curl -X GET "http://localhost:8000/api/claims/avax/vault-123"
+curl -X GET "http://localhost:8000/api/claims/avax/vault-123" \
+  -H "Authorization: Bearer $API_AUTH_TOKEN"
 ```
 
 Response:
@@ -319,6 +356,7 @@ Response:
 ```bash
 # Execute claims for a specific chain
 curl -X POST "http://localhost:8000/api/claims/cardano" \
+  -H "Authorization: Bearer $API_AUTH_TOKEN" \
   -H 'accept: */*' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -345,6 +383,7 @@ Response:
 ```bash
 # Transfer NIGHT tokens between addresses
 curl -X POST "http://localhost:8000/api/claim/transfer" \
+  -H "Authorization: Bearer $API_AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "sourceVaultId": "vault-123",
@@ -367,7 +406,8 @@ Response:
 
 ```bash
 # Get deposit addresses for a vault
-curl -X GET "http://localhost:8000/api/vaults/bitcoin/vault-123"
+curl -X GET "http://localhost:8000/api/vaults/bitcoin/vault-123" \
+  -H "Authorization: Bearer $API_AUTH_TOKEN"
 ```
 
 Response:
@@ -426,6 +466,8 @@ Access the interactive API documentation at:
 
 - Swagger UI: `http://localhost:8000/api-docs`
 - OpenAPI JSON: `http://localhost:8000/api-docs-json`
+
+Both require the bearer token (see [Authentication](#authentication)).
 
 ### TypeDoc Documentation
 
